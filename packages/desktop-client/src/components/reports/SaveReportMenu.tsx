@@ -1,20 +1,17 @@
-import React from 'react';
+import React, { type ComponentPropsWithoutRef } from 'react';
 
-import { Menu, type MenuProps } from '../common/Menu';
-import { MenuTooltip } from '../common/MenuTooltip';
+import { Menu } from '../common/Menu';
 
 export function SaveReportMenu({
-  onClose,
   onMenuSelect,
   savedStatus,
   listReports,
 }: {
-  onClose: () => void;
   onMenuSelect: (item: string) => void;
   savedStatus: string;
   listReports: number;
 }) {
-  const savedMenu: MenuProps =
+  const savedMenu: ComponentPropsWithoutRef<typeof Menu> =
     savedStatus === 'saved'
       ? {
           items: [
@@ -27,7 +24,7 @@ export function SaveReportMenu({
           items: [],
         };
 
-  const modifiedMenu: MenuProps =
+  const modifiedMenu: ComponentPropsWithoutRef<typeof Menu> =
     savedStatus === 'modified'
       ? {
           items: [
@@ -48,7 +45,7 @@ export function SaveReportMenu({
           items: [],
         };
 
-  const unsavedMenu: MenuProps = {
+  const unsavedMenu: ComponentPropsWithoutRef<typeof Menu> = {
     items: [
       {
         name: 'save-report',
@@ -68,17 +65,11 @@ export function SaveReportMenu({
   };
 
   return (
-    <MenuTooltip width={150} onClose={onClose}>
-      <Menu
-        onMenuSelect={item => {
-          onMenuSelect(item);
-        }}
-        items={[
-          ...savedMenu.items,
-          ...modifiedMenu.items,
-          ...unsavedMenu.items,
-        ]}
-      />
-    </MenuTooltip>
+    <Menu
+      onMenuSelect={item => {
+        onMenuSelect(item);
+      }}
+      items={[...savedMenu.items, ...modifiedMenu.items, ...unsavedMenu.items]}
+    />
   );
 }

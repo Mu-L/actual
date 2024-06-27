@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useHotkeys } from 'react-hotkeys-hook';
 
 import { useLocalPref } from '../../hooks/useLocalPref';
 import { useSplitsExpanded } from '../../hooks/useSplitsExpanded';
@@ -18,18 +19,17 @@ import { InitialFocus } from '../common/InitialFocus';
 import { Input } from '../common/Input';
 import { Menu } from '../common/Menu';
 import { MenuButton } from '../common/MenuButton';
-import { MenuTooltip } from '../common/MenuTooltip';
+import { Popover } from '../common/Popover';
 import { Search } from '../common/Search';
 import { Stack } from '../common/Stack';
 import { View } from '../common/View';
 import { FilterButton } from '../filters/FiltersMenu';
 import { FiltersStack } from '../filters/FiltersStack';
-import { KeyHandlers } from '../KeyHandlers';
 import { NotesButton } from '../NotesButton';
-import { SelectedTransactionsButton } from '../transactions/SelectedTransactions';
+import { SelectedTransactionsButton } from '../transactions/SelectedTransactionsButton';
 
 import { Balances } from './Balance';
-import { ReconcilingMessage, ReconcileTooltip } from './Reconcile';
+import { ReconcilingMessage, ReconcileMenu } from './Reconcile';
 
 export function AccountHeader({
   tableRef,
@@ -39,21 +39,25 @@ export function AccountHeader({
   accountName,
   account,
   filterId,
-  filtersList,
+  savedFilters,
   accountsSyncing,
+  failedAccounts,
   accounts,
   transactions,
   showBalances,
   showExtraBalances,
   showCleared,
+  showReconciled,
   showEmptyMessage,
   balanceQuery,
   reconcileAmount,
   canCalculateBalance,
+  isFiltered,
+  filteredAmount,
   isSorted,
   search,
-  filters,
-  conditionsOp,
+  filterConditions,
+  filterConditionsOp,
   pushModal,
   onSearch,
   onAddTransaction,
@@ -76,13 +80,16 @@ export function AccountHeader({
   onUpdateFilter,
   onClearFilters,
   onReloadSavedFilter,
-  onCondOpChange,
+  onConditionsOpChange,
   onDeleteFilter,
   onScheduleAction,
   onSetTransfer,
+  onMakeAsSplitTransaction,
+  onMakeAsNonSplitTransactions,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const searchInput = useRef(null);
+  const triggerRef = useRef(null);
   const splitsExpanded = useSplitsExpanded();
   const syncServerStatus = useSyncServerStatus();
   const isUsingServer = syncServerStatus !== 'no-server';
@@ -109,23 +116,49 @@ export function AccountHeader({
     }
   }
 
+  useHotkeys(
+    'ctrl+f, cmd+f, meta+f',
+    () => {
+      if (searchInput.current) {
+        searchInput.current.focus();
+      }
+    },
+    {
+      enableOnFormTags: true,
+      preventDefault: true,
+      scopes: ['app'],
+    },
+    [searchInput],
+  );
+
   return (
     <>
-      <KeyHandlers
-        keys={{
-          'ctrl+f, cmd+f': () => {
-            if (searchInput.current) {
-              searchInput.current.focus();
-            }
-          },
-        }}
-      />
-
       <View style={{ ...styles.pageContent, paddingBottom: 10, flexShrink: 0 }}>
         <View
           style={{ marginTop: 2, marginBottom: 10, alignItems: 'flex-start' }}
         >
-          <View>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 3,
+            }}
+          >
+            {!!account?.bank && (
+              <View
+                style={{
+                  backgroundColor: accountsSyncing.includes(account.id)
+                    ? theme.sidebarItemBackgroundPending
+                    : failedAccounts.has(account.id)
+                      ? theme.sidebarItemBackgroundFailed
+                      : theme.sidebarItemBackgroundPositive,
+                  marginRight: '4px',
+                  width: 8,
+                  height: 8,
+                  borderRadius: 8,
+                }}
+              />
+            )}
             {editingName ? (
               <InitialFocus>
                 <Input
@@ -136,11 +169,12 @@ export function AccountHeader({
                   style={{
                     fontSize: 25,
                     fontWeight: 500,
-                    marginTop: -5,
-                    marginBottom: -2,
-                    marginLeft: -5,
+                    marginTop: -3,
+                    marginBottom: -4,
+                    marginLeft: -6,
                     paddingTop: 2,
                     paddingBottom: 2,
+                    width: Math.max(20, accountName.length) + 'ch',
                   }}
                 />
               </InitialFocus>
@@ -212,8 +246,8 @@ export function AccountHeader({
           showExtraBalances={showExtraBalances}
           onToggleExtraBalances={onToggleExtraBalances}
           account={account}
-          filteredItems={filters}
-          transactions={transactions}
+          isFiltered={isFiltered}
+          filteredAmount={filteredAmount}
         />
 
         <Stack
@@ -240,7 +274,7 @@ export function AccountHeader({
                     }
                     style={{ marginRight: 4 }}
                   />{' '}
-                  {isServerOffline ? 'Sync offline' : 'Sync'}
+                  {isServerOffline ? 'Bank Sync Offline' : 'Bank Sync'}
                 </>
               ) : (
                 <>
@@ -287,11 +321,13 @@ export function AccountHeader({
               onScheduleAction={onScheduleAction}
               pushModal={pushModal}
               showMakeTransfer={showMakeTransfer}
+              onMakeAsSplitTransaction={onMakeAsSplitTransaction}
+              onMakeAsNonSplitTransactions={onMakeAsNonSplitTransactions}
             />
           )}
           <Button
             type="bare"
-            disabled={search !== '' || filters.length > 0}
+            disabled={search !== '' || filterConditions.length > 0}
             style={{ padding: 6, marginLeft: 10 }}
             onClick={onToggleSplits}
             title={
@@ -308,9 +344,14 @@ export function AccountHeader({
           </Button>
           {account ? (
             <View>
-              <MenuButton onClick={() => setMenuOpen(true)} />
+              <MenuButton ref={triggerRef} onClick={() => setMenuOpen(true)} />
 
-              {menuOpen && (
+              <Popover
+                triggerRef={triggerRef}
+                style={{ width: 275 }}
+                isOpen={menuOpen}
+                onOpenChange={() => setMenuOpen(false)}
+              >
                 <AccountMenu
                   account={account}
                   canSync={canSync}
@@ -318,6 +359,7 @@ export function AccountHeader({
                   isSorted={isSorted}
                   showBalances={showBalances}
                   showCleared={showCleared}
+                  showReconciled={showReconciled}
                   onMenuSelect={item => {
                     setMenuOpen(false);
                     onMenuSelect(item);
@@ -325,37 +367,46 @@ export function AccountHeader({
                   onReconcile={onReconcile}
                   onClose={() => setMenuOpen(false)}
                 />
-              )}
+              </Popover>
             </View>
           ) : (
             <View>
-              <MenuButton onClick={() => setMenuOpen(true)} />
+              <MenuButton ref={triggerRef} onClick={() => setMenuOpen(true)} />
 
-              {menuOpen && (
-                <CategoryMenu
+              <Popover
+                triggerRef={triggerRef}
+                isOpen={menuOpen}
+                onOpenChange={() => setMenuOpen(false)}
+              >
+                <Menu
                   onMenuSelect={item => {
                     setMenuOpen(false);
                     onMenuSelect(item);
                   }}
-                  onClose={() => setMenuOpen(false)}
-                  isSorted={isSorted}
+                  items={[
+                    isSorted && {
+                      name: 'remove-sorting',
+                      text: 'Remove all sorting',
+                    },
+                    { name: 'export', text: 'Export' },
+                  ]}
                 />
-              )}
+              </Popover>
             </View>
           )}
         </Stack>
 
-        {filters && filters.length > 0 && (
+        {filterConditions?.length > 0 && (
           <FiltersStack
-            filters={filters}
-            conditionsOp={conditionsOp}
+            conditions={filterConditions}
+            conditionsOp={filterConditionsOp}
             onUpdateFilter={onUpdateFilter}
             onDeleteFilter={onDeleteFilter}
             onClearFilters={onClearFilters}
             onReloadSavedFilter={onReloadSavedFilter}
             filterId={filterId}
-            filtersList={filtersList}
-            onCondOpChange={onCondOpChange}
+            savedFilters={savedFilters}
+            onConditionsOpChange={onConditionsOpChange}
           />
         )}
       </View>
@@ -377,6 +428,7 @@ function AccountMenu({
   showBalances,
   canShowBalances,
   showCleared,
+  showReconciled,
   onClose,
   isSorted,
   onReconcile,
@@ -386,71 +438,54 @@ function AccountMenu({
   const syncServerStatus = useSyncServerStatus();
 
   return tooltip === 'reconcile' ? (
-    <ReconcileTooltip
+    <ReconcileMenu
       account={account}
       onClose={onClose}
       onReconcile={onReconcile}
     />
   ) : (
-    <MenuTooltip width={200} onClose={onClose}>
-      <Menu
-        onMenuSelect={item => {
-          if (item === 'reconcile') {
-            setTooltip('reconcile');
-          } else {
-            onMenuSelect(item);
-          }
-        }}
-        items={[
-          isSorted && {
-            name: 'remove-sorting',
-            text: 'Remove all sorting',
-          },
-          canShowBalances && {
-            name: 'toggle-balance',
-            text: (showBalances ? 'Hide' : 'Show') + ' running balance',
-          },
-          {
-            name: 'toggle-cleared',
-            text: (showCleared ? 'Hide' : 'Show') + ' “cleared” checkboxes',
-          },
-          { name: 'export', text: 'Export' },
-          { name: 'reconcile', text: 'Reconcile' },
-          account &&
-            !account.closed &&
-            (canSync
-              ? {
-                  name: 'unlink',
-                  text: 'Unlink account',
-                }
-              : syncServerStatus === 'online' && {
-                  name: 'link',
-                  text: 'Link account',
-                }),
-          account.closed
-            ? { name: 'reopen', text: 'Reopen account' }
-            : { name: 'close', text: 'Close account' },
-        ].filter(x => x)}
-      />
-    </MenuTooltip>
-  );
-}
-
-function CategoryMenu({ onClose, onMenuSelect, isSorted }) {
-  return (
-    <MenuTooltip width={200} onClose={onClose}>
-      <Menu
-        onMenuSelect={item => {
+    <Menu
+      onMenuSelect={item => {
+        if (item === 'reconcile') {
+          setTooltip('reconcile');
+        } else {
           onMenuSelect(item);
-        }}
-        items={[
-          isSorted && {
-            name: 'remove-sorting',
-            text: 'Remove all sorting',
-          },
-          { name: 'export', text: 'Export' },
-        ]}
-      />
-    </MenuTooltip>
+        }
+      }}
+      items={[
+        isSorted && {
+          name: 'remove-sorting',
+          text: 'Remove all sorting',
+        },
+        canShowBalances && {
+          name: 'toggle-balance',
+          text: (showBalances ? 'Hide' : 'Show') + ' running balance',
+        },
+        {
+          name: 'toggle-cleared',
+          text: (showCleared ? 'Hide' : 'Show') + ' “cleared” checkboxes',
+        },
+        {
+          name: 'toggle-reconciled',
+          text: (showReconciled ? 'Hide' : 'Show') + ' reconciled transactions',
+        },
+        { name: 'export', text: 'Export' },
+        { name: 'reconcile', text: 'Reconcile' },
+        account &&
+          !account.closed &&
+          (canSync
+            ? {
+                name: 'unlink',
+                text: 'Unlink account',
+              }
+            : syncServerStatus === 'online' && {
+                name: 'link',
+                text: 'Link account',
+              }),
+        account.closed
+          ? { name: 'reopen', text: 'Reopen account' }
+          : { name: 'close', text: 'Close account' },
+      ].filter(x => x)}
+    />
   );
 }

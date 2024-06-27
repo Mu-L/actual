@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 
 import { mapField, friendlyOp } from 'loot-core/src/shared/rules';
 import { integerToCurrency } from 'loot-core/src/shared/util';
@@ -10,6 +10,7 @@ import {
 import { SvgDelete } from '../../icons/v0';
 import { type CSSProperties, theme } from '../../style';
 import { Button } from '../common/Button';
+import { Popover } from '../common/Popover';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { Value } from '../rules/Value';
@@ -24,7 +25,7 @@ type FilterExpressionProps = {
   value: string | string[] | number | boolean | undefined;
   options: RuleConditionEntity['options'];
   style?: CSSProperties;
-  onChange: (cond: RuleConditionEntity) => RuleConditionEntity;
+  onChange: (cond: RuleConditionEntity) => void;
   onDelete: () => void;
 };
 
@@ -39,6 +40,7 @@ export function FilterExpression({
   onDelete,
 }: FilterExpressionProps) {
   const [editing, setEditing] = useState(false);
+  const triggerRef = useRef(null);
 
   const field = subfieldFromFilter({ field: originalField, value });
 
@@ -55,10 +57,10 @@ export function FilterExpression({
       }}
     >
       <Button
+        ref={triggerRef}
         type="bare"
         disabled={customName != null}
         onClick={() => setEditing(true)}
-        style={{ marginRight: -7 }}
       >
         <div style={{ paddingBlock: 1, paddingLeft: 5, paddingRight: 2 }}>
           {customName ? (
@@ -73,7 +75,11 @@ export function FilterExpression({
                 value={value}
                 field={field}
                 inline={true}
-                valueIsRaw={op === 'contains' || op === 'doesNotContain'}
+                valueIsRaw={
+                  op === 'contains' ||
+                  op === 'matches' ||
+                  op === 'doesNotContain'
+                }
               />
             </>
           )}
@@ -84,12 +90,19 @@ export function FilterExpression({
           style={{
             width: 8,
             height: 8,
-            margin: 5,
-            marginLeft: 3,
+            margin: 4,
           }}
         />
       </Button>
-      {editing && (
+
+      <Popover
+        triggerRef={triggerRef}
+        placement="bottom start"
+        isOpen={editing}
+        onOpenChange={() => setEditing(false)}
+        style={{ width: 275, padding: 15, color: theme.menuItemText }}
+        data-testid="filters-menu-tooltip"
+      >
         <FilterEditor
           field={originalField}
           op={op}
@@ -102,7 +115,7 @@ export function FilterExpression({
           onSave={onChange}
           onClose={() => setEditing(false)}
         />
-      )}
+      </Popover>
     </View>
   );
 }

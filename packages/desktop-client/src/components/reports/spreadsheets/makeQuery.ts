@@ -1,24 +1,32 @@
 import { q } from 'loot-core/src/shared/query';
 import { type CategoryEntity } from 'loot-core/src/types/models';
 
+import { ReportOptions } from '../ReportOptions';
+
 export function makeQuery(
   name: string,
   startDate: string,
   endDate: string,
   interval: string,
-  selectedCategories: CategoryEntity[],
   categoryFilter: CategoryEntity[],
   conditionsOpKey: string,
   filters: unknown[],
 ) {
   const intervalGroup =
-    interval === 'Monthly' ? { $month: '$date' } : { $year: '$date' };
-  const intervalFilter = interval === 'Monthly' ? '$month' : '$year';
+    interval === 'Monthly'
+      ? { $month: '$date' }
+      : interval === 'Yearly'
+        ? { $year: '$date' }
+        : { $day: '$date' };
+  const intervalFilter =
+    interval === 'Weekly'
+      ? '$day'
+      : '$' + ReportOptions.intervalMap.get(interval)?.toLowerCase() || 'month';
 
   const query = q('transactions')
     //Apply Category_Selector
     .filter(
-      selectedCategories && {
+      categoryFilter && {
         $or: [
           {
             category: null,
@@ -57,6 +65,7 @@ export function makeQuery(
       { date: intervalGroup },
       { category: { $id: '$category.id' } },
       { categoryHidden: { $id: '$category.hidden' } },
+      { categoryIncome: { $id: '$category.is_income' } },
       { categoryGroup: { $id: '$category.group.id' } },
       { categoryGroupHidden: { $id: '$category.group.hidden' } },
       { account: { $id: '$account.id' } },

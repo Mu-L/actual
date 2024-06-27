@@ -1,134 +1,210 @@
-import React, { memo, useRef, useState } from 'react';
+import React, { memo, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 
+import { AutoTextSize } from 'auto-text-size';
 import memoizeOne from 'memoize-one';
 
-import { pushModal } from 'loot-core/client/actions';
+import { collapseModals, pushModal } from 'loot-core/client/actions';
 import { rolloverBudget, reportBudget } from 'loot-core/src/client/queries';
 import * as monthUtils from 'loot-core/src/shared/months';
 
 import { useFeatureFlag } from '../../../hooks/useFeatureFlag';
 import { useLocalPref } from '../../../hooks/useLocalPref';
-import {
-  SingleActiveEditFormProvider,
-  useSingleActiveEditForm,
-} from '../../../hooks/useSingleActiveEditForm';
+import { useNavigate } from '../../../hooks/useNavigate';
+import { SvgLogo } from '../../../icons/logo';
+import { SvgExpandArrow } from '../../../icons/v0';
 import {
   SvgArrowThinLeft,
   SvgArrowThinRight,
-  SvgDotsHorizontalTriple,
+  SvgCheveronRight,
 } from '../../../icons/v1';
+import { SvgViewShow } from '../../../icons/v2';
 import { useResponsive } from '../../../ResponsiveProvider';
 import { theme, styles } from '../../../style';
 import { BalanceWithCarryover } from '../../budget/BalanceWithCarryover';
-import { BalanceTooltip as ReportBudgetBalanceTooltip } from '../../budget/report/BalanceTooltip';
-import { BalanceTooltip as RolloverBudgetBalanceTooltip } from '../../budget/rollover/BalanceTooltip';
-import { makeAmountGrey } from '../../budget/util';
+import { makeAmountGrey, makeBalanceAmountStyle } from '../../budget/util';
 import { Button } from '../../common/Button';
 import { Card } from '../../common/Card';
 import { Label } from '../../common/Label';
-import { Menu } from '../../common/Menu';
 import { Text } from '../../common/Text';
 import { View } from '../../common/View';
-import { Page } from '../../Page';
+import { MobilePageHeader, Page } from '../../Page';
 import { CellValue } from '../../spreadsheet/CellValue';
-import { NamespaceContext } from '../../spreadsheet/NamespaceContext';
 import { useFormat } from '../../spreadsheet/useFormat';
 import { useSheetValue } from '../../spreadsheet/useSheetValue';
-import { Tooltip, useTooltip } from '../../tooltips';
-import { AmountInput } from '../../util/AmountInput';
 import { MOBILE_NAV_HEIGHT } from '../MobileNavTabs';
 import { PullToRefresh } from '../PullToRefresh';
-// import {
-//   AmountAccessoryContext,
-//   MathOperations
-// } from '../mobile/AmountInput';
 
-// import { DragDrop, Draggable, Droppable, DragDropHighlight } from './dragdrop';
-import { ListItem, ROW_HEIGHT } from './ListItem';
+import { ListItem } from './ListItem';
 
-function ToBudget({ toBudget, onClick }) {
+const PILL_STYLE = {
+  borderRadius: 16,
+  color: theme.pillText,
+  backgroundColor: theme.pillBackgroundLight,
+};
+
+function getColumnWidth({ show3Cols, isSidebar = false, offset = 0 } = {}) {
+  // If show3Cols = 35vw | 20vw | 20vw | 20vw,
+  // Else = 45vw | 25vw | 25vw,
+  if (!isSidebar) {
+    return show3Cols ? `${20 + offset}vw` : `${25 + offset}vw`;
+  }
+  return show3Cols ? `${35 + offset}vw` : `${45 + offset}vw`;
+}
+
+function ToBudget({ toBudget, onClick, show3Cols }) {
   const amount = useSheetValue(toBudget);
+  const format = useFormat();
+  const sidebarColumnWidth = getColumnWidth({ show3Cols, isSidebar: true });
+
   return (
-    <Button
-      type="bare"
-      style={{ flexDirection: 'column', alignItems: 'flex-start' }}
-      onClick={onClick}
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        width: sidebarColumnWidth,
+      }}
     >
-      <Label
-        title={amount < 0 ? 'OVERBUDGETED' : 'TO BUDGET'}
-        style={{
-          ...styles.underlinedText,
-          color: theme.formInputText,
-          flexShrink: 0,
-          textAlign: 'left',
-        }}
-      />
-      <CellValue
-        binding={toBudget}
-        type="financial"
-        style={{
-          ...styles.smallText,
-          fontWeight: '500',
-          color: amount < 0 ? theme.errorText : theme.formInputText,
-        }}
-      />
-    </Button>
+      <Button
+        type="bare"
+        style={{ maxWidth: sidebarColumnWidth }}
+        onClick={onClick}
+      >
+        <View>
+          <Label
+            title={amount < 0 ? 'Overbudgeted' : 'To Budget'}
+            style={{
+              ...(amount < 0 ? styles.smallText : {}),
+              color: theme.formInputText,
+              flexShrink: 0,
+              textAlign: 'left',
+            }}
+          />
+          <CellValue
+            binding={toBudget}
+            type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: sidebarColumnWidth,
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: amount < 0 ? theme.errorText : theme.formInputText,
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
+          />
+        </View>
+        <SvgCheveronRight
+          style={{
+            flexShrink: 0,
+            color: theme.mobileHeaderTextSubdued,
+            marginLeft: 5,
+          }}
+          width={14}
+          height={14}
+        />
+      </Button>
+    </View>
   );
 }
 
-function Saved({ projected, onClick }) {
+function Saved({ projected, onClick, show3Cols }) {
   const binding = projected
     ? reportBudget.totalBudgetedSaved
     : reportBudget.totalSaved;
 
   const saved = useSheetValue(binding) || 0;
+  const format = useFormat();
   const isNegative = saved < 0;
+  const sidebarColumnWidth = getColumnWidth({ show3Cols, isSidebar: true });
 
   return (
-    <Button
-      type="bare"
+    <View
       style={{
-        flexDirection: 'column',
-        alignItems: 'flex-start',
+        flexDirection: 'row',
+        justifyContent: 'flex-start',
+        alignItems: 'center',
+        width: sidebarColumnWidth,
       }}
-      onClick={onClick}
     >
-      {projected ? (
-        <Label
-          title="PROJECTED SAVINGS"
-          style={{
-            ...styles.underlinedText,
-            color: theme.formInputText,
-            textAlign: 'left',
-            fontSize: 9,
-          }}
-        />
-      ) : (
-        <Label
-          title={isNegative ? 'OVERSPENT' : 'SAVED'}
-          style={{
-            ...styles.underlinedText,
-            color: theme.formInputText,
-            textAlign: 'left',
-          }}
-        />
-      )}
+      <Button
+        type="bare"
+        style={{ maxWidth: sidebarColumnWidth }}
+        onClick={onClick}
+      >
+        <View>
+          <View>
+            {projected ? (
+              <AutoTextSize
+                as={Label}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                title="Projected Savings"
+                style={{
+                  maxWidth: sidebarColumnWidth,
+                  color: theme.formInputText,
+                  textAlign: 'left',
+                  fontSize: 12,
+                }}
+              />
+            ) : (
+              <Label
+                title={isNegative ? 'Overspent' : 'Saved'}
+                style={{
+                  color: theme.formInputText,
+                  textAlign: 'left',
+                }}
+              />
+            )}
+          </View>
 
-      <CellValue
-        binding={binding}
-        type="financial"
-        style={{
-          ...styles.smallText,
-          fontWeight: '500',
-          color: projected
-            ? theme.warningText
-            : isNegative
-              ? theme.errorTextDark
-              : theme.formInputText,
-        }}
-      />
-    </Button>
+          <CellValue
+            binding={binding}
+            type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: sidebarColumnWidth,
+                  fontSize: 12,
+                  fontWeight: '700',
+                  color: projected
+                    ? theme.warningText
+                    : isNegative
+                      ? theme.errorTextDark
+                      : theme.formInputText,
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
+          />
+        </View>
+        <SvgCheveronRight
+          style={{
+            flexShrink: 0,
+            color: theme.mobileHeaderTextSubdued,
+            marginLeft: 5,
+          }}
+          width={14}
+          height={14}
+        />
+      </Button>
+    </View>
   );
 }
 
@@ -136,66 +212,63 @@ function BudgetCell({
   name,
   binding,
   style,
-  textStyle,
   categoryId,
   month,
   onBudgetAction,
-  onEdit,
-  onBlur,
-  isEditing,
+  ...props
 }) {
-  const sheetValue = useSheetValue(binding);
+  const dispatch = useDispatch();
+  const [budgetType = 'rollover'] = useLocalPref('budgetType');
 
-  function updateBudgetAmount(amount) {
-    onBudgetAction?.(month, 'budget-amount', {
-      category: categoryId,
-      amount,
-    });
-  }
+  const categoryBudgetMenuModal = `${budgetType}-budget-menu`;
 
-  function onAmountClick() {
-    onEdit?.();
-  }
+  const onOpenCategoryBudgetMenu = () => {
+    dispatch(
+      pushModal(categoryBudgetMenuModal, {
+        categoryId,
+        month,
+        onUpdateBudget: amount => {
+          onBudgetAction(month, 'budget-amount', {
+            category: categoryId,
+            amount,
+          });
+        },
+        onCopyLastMonthAverage: () => {
+          onBudgetAction(month, 'copy-single-last', {
+            category: categoryId,
+          });
+        },
+        onSetMonthsAverage: numberOfMonths => {
+          if (
+            numberOfMonths !== 3 &&
+            numberOfMonths !== 6 &&
+            numberOfMonths !== 12
+          ) {
+            return;
+          }
+
+          onBudgetAction(month, `set-single-${numberOfMonths}-avg`, {
+            category: categoryId,
+          });
+        },
+        onApplyBudgetTemplate: () => {
+          onBudgetAction(month, 'apply-single-category-template', {
+            category: categoryId,
+          });
+        },
+      }),
+    );
+  };
 
   return (
-    <View style={style}>
-      <AmountInput
-        value={sheetValue}
-        zeroSign="+"
-        style={{
-          ...(!isEditing && { display: 'none' }),
-          height: ROW_HEIGHT,
-          transform: 'translateX(6px)',
-        }}
-        focused={isEditing}
-        textStyle={{ ...styles.smallText, ...textStyle }}
-        onUpdate={updateBudgetAmount}
-        onBlur={onBlur}
-      />
-      <View
-        role="button"
-        style={{
-          ...(isEditing && { display: 'none' }),
-          justifyContent: 'center',
-          alignItems: 'flex-end',
-          height: ROW_HEIGHT,
-        }}
-      >
-        <CellValue
-          binding={binding}
-          type="financial"
-          style={{
-            ...styles.smallText,
-            ...textStyle,
-            ...styles.underlinedText,
-          }}
-          getStyle={makeAmountGrey}
-          data-testid={name}
-          onPointerUp={onAmountClick}
-          onPointerDown={e => e.preventDefault()}
-        />
-      </View>
-    </View>
+    <CellValue
+      binding={binding}
+      type="financial"
+      getStyle={makeAmountGrey}
+      data-testid={name}
+      onClick={onOpenCategoryBudgetMenu}
+      {...props}
+    />
   );
 }
 
@@ -209,7 +282,7 @@ function ExpenseGroupPreview({ group, pending, style }) {
         opacity: pending ? 1 : 0.4,
       }}
     >
-      <ExpenseGroupTotals group={group} blank={true} />
+      <ExpenseGroupHeader group={group} blank={true} />
 
       {group.categories.map((cat, index) => (
         <ExpenseCategory
@@ -241,6 +314,7 @@ function ExpenseCategoryPreview({ name, pending, style }) {
 const ExpenseCategory = memo(function ExpenseCategory({
   type,
   category,
+  isHidden,
   goal,
   budgeted,
   spent,
@@ -257,34 +331,85 @@ const ExpenseCategory = memo(function ExpenseCategory({
   showBudgetedCol,
 }) {
   const opacity = blank ? 0 : 1;
-  const balanceTooltip = useTooltip();
 
-  const [isEditingBudget, setIsEditingBudget] = useState(false);
-  const { onRequestActiveEdit, onClearActiveEdit } = useSingleActiveEditForm();
+  const isGoalTemplatesEnabled = useFeatureFlag('goalTemplatesEnabled');
+  const goalTemp = useSheetValue(goal);
+  const goalValue = isGoalTemplatesEnabled ? goalTemp : null;
+  const budgetedTemp = useSheetValue(budgeted);
+  const budgetedValue = isGoalTemplatesEnabled ? budgetedTemp : null;
 
-  const onEditBudget = () => {
-    onRequestActiveEdit(`${category.id}-budget`, () => {
-      setIsEditingBudget(true);
-      return () => setIsEditingBudget(false);
+  const [budgetType = 'rollover'] = useLocalPref('budgetType');
+  const dispatch = useDispatch();
+
+  const onCarryover = carryover => {
+    onBudgetAction(month, 'carryover', {
+      category: category.id,
+      flag: carryover,
     });
+    dispatch(collapseModals(`${budgetType}-balance-menu`));
   };
 
-  const onOpenBalanceActionMenu = () => {
-    onRequestActiveEdit(`${category.id}-balance`, () => {
-      balanceTooltip.open();
-      return () => balanceTooltip.close();
-    });
+  const catBalance = useSheetValue(
+    type === 'rollover'
+      ? rolloverBudget.catBalance(category.id)
+      : reportBudget.catBalance(category.id),
+  );
+
+  const onTransfer = () => {
+    dispatch(
+      pushModal('transfer', {
+        title: category.name,
+        month,
+        amount: catBalance,
+        onSubmit: (amount, toCategoryId) => {
+          onBudgetAction(month, 'transfer-category', {
+            amount,
+            from: category.id,
+            to: toCategoryId,
+          });
+          dispatch(collapseModals(`${budgetType}-balance-menu`));
+        },
+        showToBeBudgeted: true,
+      }),
+    );
+  };
+
+  const onCover = () => {
+    dispatch(
+      pushModal('cover', {
+        categoryId: category.id,
+        month,
+        onSubmit: fromCategoryId => {
+          onBudgetAction(month, 'cover-overspending', {
+            to: category.id,
+            from: fromCategoryId,
+          });
+          dispatch(collapseModals(`${budgetType}-balance-menu`));
+        },
+      }),
+    );
+  };
+
+  const onOpenBalanceMenu = () => {
+    dispatch(
+      pushModal(`${budgetType}-balance-menu`, {
+        categoryId: category.id,
+        month,
+        onCarryover,
+        ...(budgetType === 'rollover' && { onTransfer, onCover }),
+      }),
+    );
   };
 
   const listItemRef = useRef();
-
-  const _onBudgetAction = (monthIndex, action, arg) => {
-    onBudgetAction?.(
-      monthUtils.getMonthFromIndex(monthUtils.getYear(month), monthIndex),
-      action,
-      arg,
-    );
+  const format = useFormat();
+  const navigate = useNavigate();
+  const onShowActivity = () => {
+    navigate(`/categories/${category.id}?month=${month}`);
   };
+
+  const sidebarColumnWidth = getColumnWidth({ show3Cols, isSidebar: true });
+  const columnWidth = getColumnWidth({ show3Cols });
 
   const content = (
     <ListItem
@@ -292,24 +417,51 @@ const ExpenseCategory = memo(function ExpenseCategory({
         backgroundColor: 'transparent',
         borderBottomWidth: 0,
         borderTopWidth: index > 0 ? 1 : 0,
-        opacity: !!category.hidden ? 0.5 : undefined,
+        opacity: isHidden ? 0.5 : undefined,
         ...style,
       }}
       data-testid="row"
       innerRef={listItemRef}
     >
-      <View role="button" style={{ flex: 1 }}>
-        <Text
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'flex-start',
+        }}
+      >
+        <Button
+          type="bare"
           style={{
-            ...styles.smallText,
-            ...styles.underlinedText,
-            ...styles.lineClamp(2),
+            maxWidth: sidebarColumnWidth,
           }}
           onClick={() => onEdit?.(category.id)}
-          data-testid="category-name"
         >
-          {category.name}
-        </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+            }}
+          >
+            <Text
+              style={{
+                ...styles.lineClamp(2),
+                width: sidebarColumnWidth,
+                textAlign: 'left',
+                ...styles.smallText,
+              }}
+              data-testid="category-name"
+            >
+              {category.name}
+            </Text>
+            <SvgCheveronRight
+              style={{ flexShrink: 0, color: theme.tableTextSubdued }}
+              width={14}
+              height={14}
+            />
+          </View>
+        </Button>
       </View>
       <View
         style={{
@@ -319,39 +471,84 @@ const ExpenseCategory = memo(function ExpenseCategory({
           opacity,
         }}
       >
-        <BudgetCell
-          name="budgeted"
-          binding={budgeted}
+        <View
           style={{
             ...(!show3Cols && !showBudgetedCol && { display: 'none' }),
-            width: 90,
+            width: columnWidth,
+            justifyContent: 'center',
+            alignItems: 'flex-end',
           }}
-          textStyle={{ ...styles.smallText, textAlign: 'right' }}
-          categoryId={category.id}
-          month={month}
-          onBudgetAction={onBudgetAction}
-          isEditing={isEditingBudget}
-          onEdit={onEditBudget}
-          onBlur={onClearActiveEdit}
-        />
+        >
+          <BudgetCell
+            name="budgeted"
+            binding={budgeted}
+            categoryId={category.id}
+            month={month}
+            onBudgetAction={onBudgetAction}
+            formatter={value => (
+              <Button
+                type="bare"
+                style={{
+                  ...PILL_STYLE,
+                  maxWidth: columnWidth,
+                }}
+              >
+                <AutoTextSize
+                  key={`${value}|${show3Cols}|${showBudgetedCol}`}
+                  as={Text}
+                  minFontSizePx={6}
+                  maxFontSizePx={12}
+                  mode="oneline"
+                  style={{
+                    maxWidth: columnWidth,
+                    textAlign: 'right',
+                    fontSize: 12,
+                  }}
+                >
+                  {format(value, 'financial')}
+                </AutoTextSize>
+              </Button>
+            )}
+          />
+        </View>
         <View
           style={{
             ...(!show3Cols && showBudgetedCol && { display: 'none' }),
             justifyContent: 'center',
             alignItems: 'flex-end',
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
           }}
         >
           <CellValue
             name="spent"
             binding={spent}
-            style={{
-              ...styles.smallText,
-              textAlign: 'right',
-            }}
             getStyle={makeAmountGrey}
             type="financial"
+            onClick={onShowActivity}
+            formatter={value => (
+              <Button
+                type="bare"
+                style={{
+                  ...PILL_STYLE,
+                  maxWidth: columnWidth,
+                }}
+              >
+                <AutoTextSize
+                  key={`${value}|${show3Cols}|${showBudgetedCol}`}
+                  as={Text}
+                  minFontSizePx={6}
+                  maxFontSizePx={12}
+                  mode="oneline"
+                  style={{
+                    maxWidth: columnWidth,
+                    textAlign: 'right',
+                    fontSize: 12,
+                  }}
+                >
+                  {format(value, 'financial')}
+                </AutoTextSize>
+              </Button>
+            )}
           />
         </View>
         <View
@@ -359,49 +556,45 @@ const ExpenseCategory = memo(function ExpenseCategory({
             ...styles.noTapHighlight,
             justifyContent: 'center',
             alignItems: 'flex-end',
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
           }}
         >
-          <span
-            role="button"
-            onPointerUp={() => onOpenBalanceActionMenu?.()}
-            onPointerDown={e => e.preventDefault()}
-          >
+          <span role="button" onClick={() => onOpenBalanceMenu?.()}>
             <BalanceWithCarryover
               carryover={carryover}
               balance={balance}
               goal={goal}
               budgeted={budgeted}
-              balanceStyle={{
-                ...styles.smallText,
-                ...styles.underlinedText,
-              }}
+              formatter={value => (
+                <Button
+                  type="bare"
+                  style={{
+                    ...PILL_STYLE,
+                    maxWidth: columnWidth,
+                  }}
+                >
+                  <AutoTextSize
+                    key={value}
+                    as={Text}
+                    minFontSizePx={6}
+                    maxFontSizePx={12}
+                    mode="oneline"
+                    style={{
+                      maxWidth: columnWidth,
+                      ...makeBalanceAmountStyle(
+                        value,
+                        goalValue,
+                        budgetedValue,
+                      ),
+                      textAlign: 'right',
+                      fontSize: 12,
+                    }}
+                  >
+                    {format(value, 'financial')}
+                  </AutoTextSize>
+                </Button>
+              )}
             />
-            {balanceTooltip.isOpen &&
-              (type === 'report' ? (
-                <ReportBudgetBalanceTooltip
-                  offset={5}
-                  categoryId={category.id}
-                  tooltip={balanceTooltip}
-                  monthIndex={monthUtils.getMonthIndex(month)}
-                  onBudgetAction={_onBudgetAction}
-                  onClose={() => {
-                    onClearActiveEdit();
-                  }}
-                />
-              ) : (
-                <RolloverBudgetBalanceTooltip
-                  offset={5}
-                  categoryId={category.id}
-                  tooltip={balanceTooltip}
-                  monthIndex={monthUtils.getMonthIndex(month)}
-                  onBudgetAction={_onBudgetAction}
-                  onClose={() => {
-                    onClearActiveEdit();
-                  }}
-                />
-              ))}
           </span>
         </View>
       </View>
@@ -442,7 +635,7 @@ const ExpenseCategory = memo(function ExpenseCategory({
   // </Draggable>
 });
 
-const ExpenseGroupTotals = memo(function ExpenseGroupTotals({
+const ExpenseGroupHeader = memo(function ExpenseGroupHeader({
   group,
   budgeted,
   spent,
@@ -452,98 +645,197 @@ const ExpenseGroupTotals = memo(function ExpenseGroupTotals({
   blank,
   show3Cols,
   showBudgetedCol,
+  collapsed,
+  onToggleCollapse,
 }) {
   const opacity = blank ? 0 : 1;
   const listItemRef = useRef();
+  const format = useFormat();
+  const sidebarColumnWidth = getColumnWidth({
+    show3Cols,
+    isSidebar: true,
+    offset: -3.5,
+  });
+  const columnWidth = getColumnWidth({ show3Cols });
 
   const content = (
     <ListItem
       style={{
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: theme.tableRowHeaderBackground,
         opacity: !!group.hidden ? 0.5 : undefined,
+        paddingLeft: 0,
       }}
-      data-testid="totals"
+      data-testid={`expense-group-header-${group.name}`}
       innerRef={listItemRef}
     >
-      <View role="button" style={{ flex: 1 }}>
-        <Text
+      <View
+        style={{
+          flex: 1,
+          flexDirection: 'row',
+          justifyContent: 'flex-start',
+          width: sidebarColumnWidth,
+        }}
+      >
+        <Button
+          type="bare"
           style={{
-            ...styles.smallText,
-            ...styles.underlinedText,
-            ...styles.lineClamp(2),
-            fontWeight: '500',
+            flexShrink: 0,
+            color: theme.pageTextSubdued,
+            ...styles.noTapHighlight,
+          }}
+          activeStyle={{
+            backgroundColor: 'transparent',
+          }}
+          hoveredStyle={{
+            backgroundColor: 'transparent',
+          }}
+          onClick={() => onToggleCollapse?.(group.id)}
+        >
+          <SvgExpandArrow
+            width={8}
+            height={8}
+            style={{
+              flexShrink: 0,
+              transition: 'transform .1s',
+              transform: collapsed ? 'rotate(-90deg)' : '',
+            }}
+          />
+        </Button>
+        <Button
+          type="bare"
+          style={{
+            maxWidth: sidebarColumnWidth,
           }}
           onClick={() => onEdit?.(group.id)}
-          data-testid="name"
         >
-          {group.name}
-        </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+            }}
+          >
+            <Text
+              style={{
+                ...styles.lineClamp(2),
+                width: sidebarColumnWidth,
+                textAlign: 'left',
+                ...styles.smallText,
+              }}
+              data-testid="group-name"
+            >
+              {group.name}
+            </Text>
+            <SvgCheveronRight
+              style={{ flexShrink: 0, color: theme.tableTextSubdued }}
+              width={14}
+              height={14}
+            />
+          </View>
+        </Button>
       </View>
       <View
         style={{
           flexDirection: 'row',
-          justifyContent: 'center',
+          justifyContent: 'flex-end',
           alignItems: 'center',
-          height: ROW_HEIGHT,
           opacity,
+          paddingRight: 5,
         }}
       >
         <View
           style={{
             ...(!show3Cols && !showBudgetedCol && { display: 'none' }),
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
             justifyContent: 'center',
             alignItems: 'flex-end',
           }}
         >
           <CellValue
             binding={budgeted}
-            style={{
-              ...styles.smallText,
-              fontWeight: '500',
-              textAlign: 'right',
-            }}
             type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: columnWidth,
+                  fontSize: 12,
+                  fontWeight: '500',
+                  paddingLeft: 5,
+                  textAlign: 'right',
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
           />
         </View>
         <View
           style={{
             ...(!show3Cols && showBudgetedCol && { display: 'none' }),
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
             justifyContent: 'center',
             alignItems: 'flex-end',
           }}
         >
           <CellValue
             binding={spent}
-            style={{
-              ...styles.smallText,
-              fontWeight: '500',
-              textAlign: 'right',
-            }}
             type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: columnWidth,
+                  fontSize: 12,
+                  fontWeight: '500',
+                  paddingLeft: 5,
+                  textAlign: 'right',
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
           />
         </View>
         <View
           style={{
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
             justifyContent: 'center',
             alignItems: 'flex-end',
           }}
         >
           <CellValue
             binding={balance}
-            style={{
-              ...styles.smallText,
-              fontWeight: '500',
-              textAlign: 'right',
-            }}
             type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: columnWidth,
+                  fontSize: 12,
+                  fontWeight: '500',
+                  paddingLeft: 5,
+                  textAlign: 'right',
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
           />
         </View>
       </View>
@@ -579,86 +871,168 @@ const ExpenseGroupTotals = memo(function ExpenseGroupTotals({
   // </Droppable>
 });
 
-const IncomeGroupTotals = memo(function IncomeGroupTotals({
+const IncomeGroupHeader = memo(function IncomeGroupHeader({
   group,
   budgeted,
   balance,
-  style,
   onEdit,
+  collapsed,
+  onToggleCollapse,
 }) {
   const listItemRef = useRef();
+  const format = useFormat();
+  const sidebarColumnWidth = getColumnWidth({ isSidebar: true, offset: -13.5 });
+  const columnWidth = getColumnWidth();
 
   return (
     <ListItem
       style={{
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 10,
         backgroundColor: theme.tableRowHeaderBackground,
         opacity: !!group.hidden ? 0.5 : undefined,
-        ...style,
+        paddingLeft: 0,
       }}
       innerRef={listItemRef}
+      data-testid={`income-group-header-${group.name}`}
     >
       <View
-        role="button"
         style={{
           flex: 1,
-          justifyContent: 'center',
-          alignItems: 'flex-start',
-          height: ROW_HEIGHT,
+          flexDirection: 'row',
+          justifyContent: 'flex-start',
+          width: sidebarColumnWidth,
         }}
       >
-        <Text
+        <Button
+          type="bare"
           style={{
-            ...styles.smallText,
-            ...styles.underlinedText,
-            ...styles.lineClamp(2),
-            fontWeight: '500',
+            flexShrink: 0,
+            color: theme.pageTextSubdued,
+            ...styles.noTapHighlight,
+          }}
+          activeStyle={{
+            backgroundColor: 'transparent',
+          }}
+          hoveredStyle={{
+            backgroundColor: 'transparent',
+          }}
+          onClick={() => onToggleCollapse?.(group.id)}
+        >
+          <SvgExpandArrow
+            width={8}
+            height={8}
+            style={{
+              flexShrink: 0,
+              transition: 'transform .1s',
+              transform: collapsed ? 'rotate(-90deg)' : '',
+            }}
+          />
+        </Button>
+        <Button
+          type="bare"
+          style={{
+            maxWidth: sidebarColumnWidth,
           }}
           onClick={() => onEdit?.(group.id)}
-          data-testid="name"
         >
-          {group.name}
-        </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+            }}
+          >
+            <Text
+              style={{
+                ...styles.lineClamp(2),
+                width: sidebarColumnWidth,
+                textAlign: 'left',
+                ...styles.smallText,
+              }}
+              data-testid="group-name"
+            >
+              {group.name}
+            </Text>
+            <SvgCheveronRight
+              style={{ flexShrink: 0, color: theme.tableTextSubdued }}
+              width={14}
+              height={14}
+            />
+          </View>
+        </Button>
       </View>
-      {budgeted && (
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          paddingRight: 5,
+        }}
+      >
+        {budgeted && (
+          <View
+            style={{
+              justifyContent: 'center',
+              alignItems: 'flex-end',
+              width: columnWidth,
+            }}
+          >
+            <CellValue
+              binding={budgeted}
+              type="financial"
+              formatter={value => (
+                <AutoTextSize
+                  key={value}
+                  as={Text}
+                  minFontSizePx={6}
+                  maxFontSizePx={12}
+                  mode="oneline"
+                  style={{
+                    maxWidth: columnWidth,
+                    paddingLeft: 5,
+                    textAlign: 'right',
+                    fontSize: 12,
+                    fontWeight: '500',
+                  }}
+                >
+                  {format(value, 'financial')}
+                </AutoTextSize>
+              )}
+            />
+          </View>
+        )}
         <View
           style={{
             justifyContent: 'center',
             alignItems: 'flex-end',
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
           }}
         >
           <CellValue
-            binding={budgeted}
-            style={{
-              ...styles.smallText,
-              textAlign: 'right',
-              fontWeight: '500',
-            }}
+            binding={balance}
             type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: columnWidth,
+                  paddingLeft: 5,
+                  textAlign: 'right',
+                  fontSize: 12,
+                  fontWeight: '500',
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
           />
         </View>
-      )}
-      <View
-        style={{
-          justifyContent: 'center',
-          alignItems: 'flex-end',
-          width: 90,
-          height: ROW_HEIGHT,
-        }}
-      >
-        <CellValue
-          binding={balance}
-          style={{
-            ...styles.smallText,
-            textAlign: 'right',
-            fontWeight: '500',
-          }}
-          type="financial"
-        />
       </View>
     </ListItem>
   );
@@ -673,94 +1047,142 @@ const IncomeCategory = memo(function IncomeCategory({
   style,
   onEdit,
   onBudgetAction,
-  isEditingBudget,
-  onEditBudget,
 }) {
   const listItemRef = useRef();
+  const format = useFormat();
+  const sidebarColumnWidth = getColumnWidth({ isSidebar: true, offset: -10 });
+  const columnWidth = getColumnWidth();
 
   return (
     <ListItem
       style={{
         flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 10,
         backgroundColor: 'transparent',
         borderBottomWidth: 0,
         borderTopWidth: index > 0 ? 1 : 0,
         opacity: !!category.hidden ? 0.5 : undefined,
         ...style,
       }}
+      data-testid="row"
       innerRef={listItemRef}
     >
       <View
-        role="button"
         style={{
           flex: 1,
           justifyContent: 'center',
           alignItems: 'flex-start',
-          height: ROW_HEIGHT,
+          width: sidebarColumnWidth,
         }}
       >
-        <Text
+        <Button
+          type="bare"
           style={{
-            ...styles.smallText,
-            ...styles.underlinedText,
-            ...styles.lineClamp(2),
+            maxWidth: sidebarColumnWidth,
           }}
           onClick={() => onEdit?.(category.id)}
-          data-testid="name"
         >
-          {category.name}
-        </Text>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+            }}
+          >
+            <Text
+              style={{
+                ...styles.lineClamp(2),
+                width: sidebarColumnWidth,
+                textAlign: 'left',
+                ...styles.smallText,
+              }}
+              data-testid="category-name"
+            >
+              {category.name}
+            </Text>
+            <SvgCheveronRight
+              style={{ flexShrink: 0, color: theme.tableTextSubdued }}
+              width={14}
+              height={14}
+            />
+          </View>
+        </Button>
       </View>
-      {budgeted && (
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+        }}
+      >
+        {budgeted && (
+          <View
+            style={{
+              width: columnWidth,
+              justifyContent: 'center',
+              alignItems: 'flex-end',
+            }}
+          >
+            <BudgetCell
+              name="budgeted"
+              binding={budgeted}
+              categoryId={category.id}
+              month={month}
+              onBudgetAction={onBudgetAction}
+              formatter={value => (
+                <Button
+                  type="bare"
+                  style={{ ...PILL_STYLE, maxWidth: columnWidth }}
+                >
+                  <AutoTextSize
+                    key={value}
+                    as={Text}
+                    minFontSizePx={6}
+                    maxFontSizePx={12}
+                    mode="oneline"
+                    style={{
+                      maxWidth: columnWidth,
+                      textAlign: 'right',
+                      fontSize: 12,
+                    }}
+                  >
+                    {format(value, 'financial')}
+                  </AutoTextSize>
+                </Button>
+              )}
+            />
+          </View>
+        )}
         <View
           style={{
             justifyContent: 'center',
             alignItems: 'flex-end',
-            width: 90,
-            height: ROW_HEIGHT,
+            width: columnWidth,
+            paddingRight: 5,
           }}
         >
-          <BudgetCell
-            name="budgeted"
-            binding={budgeted}
-            style={{
-              width: 90,
-            }}
-            textStyle={{ ...styles.smallText, textAlign: 'right' }}
-            categoryId={category.id}
-            month={month}
-            onBudgetAction={onBudgetAction}
-            isEditing={isEditingBudget}
-            onEdit={onEditBudget}
-          />
-          {/* <CellValue
-            binding={budget}
-            style={{
-              ...styles.smallText,
-              textAlign: 'right',
-            }}
+          <CellValue
+            binding={balance}
             type="financial"
-          /> */}
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: columnWidth,
+                  textAlign: 'right',
+                  fontSize: 12,
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
+          />
         </View>
-      )}
-      <View
-        style={{
-          justifyContent: 'center',
-          alignItems: 'flex-end',
-          width: 90,
-          height: ROW_HEIGHT,
-        }}
-      >
-        <CellValue
-          binding={balance}
-          style={{
-            ...styles.smallText,
-            textAlign: 'right',
-          }}
-          type="financial"
-        />
       </View>
     </ListItem>
   );
@@ -820,6 +1242,8 @@ const ExpenseGroup = memo(function ExpenseGroup({
   showBudgetedCol,
   show3Cols,
   showHiddenCategories,
+  collapsed,
+  onToggleCollapse,
 }) {
   function editable(content) {
     if (!editMode) {
@@ -853,11 +1277,11 @@ const ExpenseGroup = memo(function ExpenseGroup({
   return editable(
     <Card
       style={{
-        marginTop: 7,
-        marginBottom: 7,
+        marginTop: 4,
+        marginBottom: 4,
       }}
     >
-      <ExpenseGroupTotals
+      <ExpenseGroupHeader
         group={group}
         showBudgetedCol={showBudgetedCol}
         budgeted={
@@ -879,11 +1303,15 @@ const ExpenseGroup = memo(function ExpenseGroup({
         editMode={editMode}
         onAddCategory={onAddCategory}
         onEdit={onEditGroup}
+        collapsed={collapsed}
+        onToggleCollapse={onToggleCollapse}
         // onReorderCategory={onReorderCategory}
       />
 
       {group.categories
-        .filter(category => !category.hidden || showHiddenCategories)
+        .filter(
+          category => !collapsed && (!category.hidden || showHiddenCategories),
+        )
         .map((category, index) => {
           return (
             <ExpenseCategory
@@ -892,6 +1320,7 @@ const ExpenseGroup = memo(function ExpenseGroup({
               show3Cols={show3Cols}
               type={type}
               category={category}
+              isHidden={!!category.hidden || group.hidden}
               goal={
                 type === 'report'
                   ? reportBudget.catGoal(category.id)
@@ -943,10 +1372,11 @@ function IncomeGroup({
   editMode,
   onEditGroup,
   onEditCategory,
-  editingBudgetCategoryId,
-  onEditCategoryBudget,
   onBudgetAction,
+  collapsed,
+  onToggleCollapse,
 }) {
+  const columnWidth = getColumnWidth();
   return (
     <View>
       <View
@@ -956,15 +1386,17 @@ function IncomeGroup({
           justifyContent: 'flex-end',
           marginTop: 50,
           marginBottom: 5,
-          marginRight: 14,
+          marginRight: 15,
         }}
       >
-        {type === 'report' && <Label title="BUDGETED" style={{ width: 90 }} />}
-        <Label title="RECEIVED" style={{ width: 90 }} />
+        {type === 'report' && (
+          <Label title="Budgeted" style={{ width: columnWidth }} />
+        )}
+        <Label title="Received" style={{ width: columnWidth }} />
       </View>
 
       <Card style={{ marginTop: 0 }}>
-        <IncomeGroupTotals
+        <IncomeGroupHeader
           group={group}
           budgeted={
             type === 'report' ? reportBudget.groupBudgeted(group.id) : null
@@ -974,16 +1406,18 @@ function IncomeGroup({
               ? reportBudget.groupSumAmount(group.id)
               : rolloverBudget.groupSumAmount(group.id)
           }
-          style={{
-            backgroundColor: theme.tableRowHeaderBackground,
-          }}
           onAddCategory={onAddCategory}
           editMode={editMode}
           onEdit={onEditGroup}
+          collapsed={collapsed}
+          onToggleCollapse={onToggleCollapse}
         />
 
         {group.categories
-          .filter(category => !category.hidden || showHiddenCategories)
+          .filter(
+            category =>
+              !collapsed && (!category.hidden || showHiddenCategories),
+          )
           .map((category, index) => {
             return (
               <IncomeCategory
@@ -1008,8 +1442,6 @@ function IncomeGroup({
                 editMode={editMode}
                 onEdit={onEditCategory}
                 onBudgetAction={onBudgetAction}
-                isEditingBudget={editingBudgetCategoryId === category.id}
-                onEditBudget={onEditCategoryBudget}
               />
             );
           })}
@@ -1029,7 +1461,6 @@ function BudgetGroups({
   onSaveCategory,
   onDeleteCategory,
   onAddCategory,
-  onAddGroup,
   onReorderCategory,
   onReorderGroup,
   onBudgetAction,
@@ -1045,67 +1476,68 @@ function BudgetGroups({
   });
 
   const { incomeGroup, expenseGroups } = separateGroups(categoryGroups);
+  const [collapsedGroupIds = [], setCollapsedGroupIdsPref] =
+    useLocalPref('budget.collapsed');
+
+  const onToggleCollapse = id => {
+    setCollapsedGroupIdsPref(
+      collapsedGroupIds.includes(id)
+        ? collapsedGroupIds.filter(collapsedId => collapsedId !== id)
+        : [...collapsedGroupIds, id],
+    );
+  };
 
   return (
-    <SingleActiveEditFormProvider formName="mobile-budget-table">
-      <View
-        data-testid="budget-groups"
-        style={{ flex: '1 0 auto', overflowY: 'auto', paddingBottom: 15 }}
-      >
-        {expenseGroups
-          .filter(group => !group.hidden || showHiddenCategories)
-          .map(group => {
-            return (
-              <ExpenseGroup
-                key={group.id}
-                type={type}
-                group={group}
-                showBudgetedCol={showBudgetedCol}
-                gestures={gestures}
-                month={month}
-                editMode={editMode}
-                onEditGroup={onEditGroup}
-                onEditCategory={onEditCategory}
-                onSaveCategory={onSaveCategory}
-                onDeleteCategory={onDeleteCategory}
-                onAddCategory={onAddCategory}
-                onReorderCategory={onReorderCategory}
-                onReorderGroup={onReorderGroup}
-                onBudgetAction={onBudgetAction}
-                show3Cols={show3Cols}
-                showHiddenCategories={showHiddenCategories}
-              />
-            );
-          })}
+    <View
+      data-testid="budget-groups"
+      style={{ flex: '1 0 auto', overflowY: 'auto', paddingBottom: 15 }}
+    >
+      {expenseGroups
+        .filter(group => !group.hidden || showHiddenCategories)
+        .map(group => {
+          return (
+            <ExpenseGroup
+              key={group.id}
+              type={type}
+              group={group}
+              showBudgetedCol={showBudgetedCol}
+              gestures={gestures}
+              month={month}
+              editMode={editMode}
+              onEditGroup={onEditGroup}
+              onEditCategory={onEditCategory}
+              onSaveCategory={onSaveCategory}
+              onDeleteCategory={onDeleteCategory}
+              onAddCategory={onAddCategory}
+              onReorderCategory={onReorderCategory}
+              onReorderGroup={onReorderGroup}
+              onBudgetAction={onBudgetAction}
+              show3Cols={show3Cols}
+              showHiddenCategories={showHiddenCategories}
+              collapsed={collapsedGroupIds.includes(group.id)}
+              onToggleCollapse={onToggleCollapse}
+            />
+          );
+        })}
 
-        <View
-          style={{
-            alignItems: 'flex-start',
-            justifyContent: 'flex-start',
-          }}
-        >
-          <Button onClick={onAddGroup} style={{ fontSize: 12, margin: 10 }}>
-            Add Group
-          </Button>
-        </View>
-
-        {incomeGroup && (
-          <IncomeGroup
-            type={type}
-            group={incomeGroup}
-            month={month}
-            onAddCategory={onAddCategory}
-            onSaveCategory={onSaveCategory}
-            onDeleteCategory={onDeleteCategory}
-            showHiddenCategories={showHiddenCategories}
-            editMode={editMode}
-            onEditGroup={onEditGroup}
-            onEditCategory={onEditCategory}
-            onBudgetAction={onBudgetAction}
-          />
-        )}
-      </View>
-    </SingleActiveEditFormProvider>
+      {incomeGroup && (
+        <IncomeGroup
+          type={type}
+          group={incomeGroup}
+          month={month}
+          onAddCategory={onAddCategory}
+          onSaveCategory={onSaveCategory}
+          onDeleteCategory={onDeleteCategory}
+          showHiddenCategories={showHiddenCategories}
+          editMode={editMode}
+          onEditGroup={onEditGroup}
+          onEditCategory={onEditCategory}
+          onBudgetAction={onBudgetAction}
+          collapsed={collapsedGroupIds.includes(incomeGroup.id)}
+          onToggleCollapse={onToggleCollapse}
+        />
+      )}
+    </View>
   );
 }
 
@@ -1114,153 +1546,212 @@ export function BudgetTable({
   categoryGroups,
   month,
   monthBounds,
-  editMode,
-  // refreshControl,
+  // editMode,
   onPrevMonth,
   onNextMonth,
   onSaveGroup,
   onDeleteGroup,
-  onAddGroup,
   onAddCategory,
   onSaveCategory,
   onDeleteCategory,
-  onEditMode,
   onReorderCategory,
   onReorderGroup,
   onShowBudgetSummary,
-  onOpenMonthActionMenu,
   onBudgetAction,
   onRefresh,
-  onSwitchBudgetType,
   onEditGroup,
   onEditCategory,
+  onOpenBudgetPageMenu,
+  onOpenBudgetMonthMenu,
 }) {
   const { width } = useResponsive();
   const show3Cols = width >= 360;
 
   // let editMode = false; // neuter editMode -- sorry, not rewriting drag-n-drop right now
-  const format = useFormat();
-  const dispatch = useDispatch();
 
   const [showSpentColumn = false, setShowSpentColumnPref] = useLocalPref(
     'mobile.showSpentColumn',
   );
 
-  const [showHiddenCategories = false, setShowHiddenCategoriesPref] =
-    useLocalPref('budget.showHiddenCategories');
-
-  function toggleDisplay() {
+  function toggleSpentColumn() {
     setShowSpentColumnPref(!showSpentColumn);
   }
 
+  const [showHiddenCategories = false] = useLocalPref(
+    'budget.showHiddenCategories',
+  );
+  const noBackgroundColorStyle = {
+    backgroundColor: 'transparent',
+    color: 'white',
+  };
+
+  return (
+    <Page
+      padding={0}
+      header={
+        <MobilePageHeader
+          title={
+            <MonthSelector
+              month={month}
+              monthBounds={monthBounds}
+              onOpenMonthMenu={onOpenBudgetMonthMenu}
+              onPrevMonth={onPrevMonth}
+              onNextMonth={onNextMonth}
+            />
+          }
+          leftContent={
+            <Button
+              type="bare"
+              style={{
+                color: theme.mobileHeaderText,
+                margin: 10,
+              }}
+              hoveredStyle={noBackgroundColorStyle}
+              activeStyle={noBackgroundColorStyle}
+              onClick={() => onOpenBudgetPageMenu?.()}
+            >
+              <SvgLogo width="20" height="20" />
+              <SvgCheveronRight
+                style={{ flexShrink: 0, color: theme.mobileHeaderTextSubdued }}
+                width="14"
+                height="14"
+              />
+            </Button>
+          }
+        />
+      }
+    >
+      <BudgetTableHeader
+        type={type}
+        month={month}
+        show3Cols={show3Cols}
+        showSpentColumn={showSpentColumn}
+        toggleSpentColumn={toggleSpentColumn}
+        onShowBudgetSummary={onShowBudgetSummary}
+      />
+      <PullToRefresh onRefresh={onRefresh}>
+        <View
+          data-testid="budget-table"
+          style={{
+            backgroundColor: theme.pageBackground,
+            paddingBottom: MOBILE_NAV_HEIGHT,
+          }}
+        >
+          <BudgetGroups
+            type={type}
+            categoryGroups={categoryGroups}
+            showBudgetedCol={!showSpentColumn}
+            show3Cols={show3Cols}
+            showHiddenCategories={showHiddenCategories}
+            month={month}
+            // gestures={gestures}
+            // editMode={editMode}
+            onEditGroup={onEditGroup}
+            onEditCategory={onEditCategory}
+            onSaveCategory={onSaveCategory}
+            onDeleteCategory={onDeleteCategory}
+            onAddCategory={onAddCategory}
+            onSaveGroup={onSaveGroup}
+            onDeleteGroup={onDeleteGroup}
+            onReorderCategory={onReorderCategory}
+            onReorderGroup={onReorderGroup}
+            onBudgetAction={onBudgetAction}
+          />
+        </View>
+      </PullToRefresh>
+    </Page>
+  );
+}
+
+function BudgetTableHeader({
+  show3Cols,
+  type,
+  month,
+  onShowBudgetSummary,
+  showSpentColumn,
+  toggleSpentColumn,
+}) {
+  const format = useFormat();
   const buttonStyle = {
     padding: 0,
     backgroundColor: 'transparent',
     borderRadius: 'unset',
   };
-
-  const _onSwitchBudgetType = () => {
-    dispatch(
-      pushModal('switch-budget-type', {
-        onSwitch: onSwitchBudgetType,
-      }),
-    );
-  };
-
-  const onToggleHiddenCategories = () => {
-    setShowHiddenCategoriesPref(!showHiddenCategories);
-  };
-
+  const sidebarColumnWidth = getColumnWidth({ show3Cols, isSidebar: true });
+  const columnWidth = getColumnWidth({ show3Cols });
   return (
-    <NamespaceContext.Provider value={monthUtils.sheetForMonth(month, type)}>
-      <Page
-        padding={0}
-        title={
-          <MonthSelector
-            month={month}
-            monthBounds={monthBounds}
-            onPrevMonth={onPrevMonth}
-            onNextMonth={onNextMonth}
-          />
-        }
-        headerRightContent={
-          !editMode ? (
-            <BudgetPageMenu
-              onEditMode={onEditMode}
-              onToggleHiddenCategories={onToggleHiddenCategories}
-              onSwitchBudgetType={_onSwitchBudgetType}
-            />
-          ) : (
-            <Button
-              type="bare"
-              hoveredStyle={{
-                color: theme.mobileHeaderText,
-                background: theme.mobileHeaderTextHover,
-              }}
-              style={{
-                ...styles.noTapHighlight,
-                ...styles.text,
-                backgroundColor: 'transparent',
-                color: theme.mobileHeaderText,
-              }}
-              onClick={() => onEditMode?.(false)}
-            >
-              Done
-            </Button>
-          )
-        }
-        style={{ flex: 1 }}
+    <View
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexShrink: 0,
+        padding: '10px 15px',
+        paddingLeft: 10,
+        backgroundColor: theme.tableRowHeaderBackground,
+        borderBottomWidth: 1,
+        borderColor: theme.tableBorder,
+      }}
+    >
+      <View
+        style={{
+          width: sidebarColumnWidth,
+          flexDirection: 'row',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+        }}
       >
-        <View
-          style={{
-            flexDirection: 'row',
-            flexShrink: 0,
-            padding: 10,
-            paddingRight: 14,
-            backgroundColor: theme.tableRowHeaderBackground,
-            borderBottomWidth: 1,
-            borderColor: theme.tableBorder,
-          }}
-        >
-          {type === 'report' ? (
-            <Saved
-              projected={month >= monthUtils.currentMonth()}
-              onClick={onShowBudgetSummary}
-            />
-          ) : (
-            <ToBudget
-              toBudget={rolloverBudget.toBudget}
-              onClick={onShowBudgetSummary}
-            />
-          )}
-          <View style={{ flex: 1 }} />
-          {(show3Cols || !showSpentColumn) && (
+        {type === 'report' ? (
+          <Saved
+            projected={month >= monthUtils.currentMonth()}
+            onClick={onShowBudgetSummary}
+            show3Cols={show3Cols}
+          />
+        ) : (
+          <ToBudget
+            toBudget={rolloverBudget.toBudget}
+            onClick={onShowBudgetSummary}
+            show3Cols={show3Cols}
+          />
+        )}
+      </View>
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+        }}
+      >
+        {(show3Cols || !showSpentColumn) && (
+          <View
+            style={{
+              width: columnWidth,
+              alignItems: 'flex-end',
+            }}
+          >
             <Button
               type="bare"
               disabled={show3Cols}
-              onClick={toggleDisplay}
-              style={{
-                ...buttonStyle,
-                padding: '0 8px',
-                margin: '0 -8px',
-                background:
-                  !showSpentColumn && !show3Cols
-                    ? `linear-gradient(-45deg, ${theme.formInputBackgroundSelection} 8px, transparent 0)`
-                    : null,
-              }}
+              onClick={toggleSpentColumn}
+              style={buttonStyle}
             >
-              <View
-                style={{
-                  flexBasis: 90,
-                  width: 90,
-                  justifyContent: 'center',
-                  alignItems: 'flex-end',
-                }}
-              >
-                <Label
-                  title="BUDGETED"
-                  style={{ color: theme.buttonNormalText }}
-                />
+              <View style={{ alignItems: 'flex-end' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {!show3Cols && (
+                    <SvgViewShow
+                      width={12}
+                      height={12}
+                      style={{
+                        color: theme.pageTextSubdued,
+                        marginRight: 5,
+                      }}
+                    />
+                  )}
+                  <Label
+                    title="Budgeted"
+                    style={{ color: theme.formInputText }}
+                  />
+                </View>
                 <CellValue
                   binding={
                     type === 'report'
@@ -1268,40 +1759,57 @@ export function BudgetTable({
                       : rolloverBudget.totalBudgeted
                   }
                   type="financial"
-                  style={{
-                    ...styles.smallText,
-                    color: theme.buttonNormalText,
-                    textAlign: 'right',
-                    fontWeight: '500',
-                  }}
-                  formatter={value => {
-                    return format(-parseFloat(value || '0'), 'financial');
-                  }}
+                  formatter={value => (
+                    <AutoTextSize
+                      key={value}
+                      as={Text}
+                      minFontSizePx={6}
+                      maxFontSizePx={12}
+                      mode="oneline"
+                      style={{
+                        maxWidth: columnWidth,
+                        color: theme.formInputText,
+                        paddingLeft: 5,
+                        textAlign: 'right',
+                        fontSize: 12,
+                        fontWeight: '500',
+                      }}
+                    >
+                      {format(value, 'financial')}
+                    </AutoTextSize>
+                  )}
                 />
               </View>
             </Button>
-          )}
-          {(show3Cols || showSpentColumn) && (
+          </View>
+        )}
+        {(show3Cols || showSpentColumn) && (
+          <View
+            style={{
+              width: columnWidth,
+              alignItems: 'flex-end',
+            }}
+          >
             <Button
               type="bare"
               disabled={show3Cols}
-              onClick={toggleDisplay}
-              style={{
-                ...buttonStyle,
-                background:
-                  showSpentColumn && !show3Cols
-                    ? `linear-gradient(45deg, ${theme.formInputBackgroundSelection} 8px, transparent 0)`
-                    : null,
-              }}
+              onClick={toggleSpentColumn}
+              style={buttonStyle}
             >
-              <View
-                style={{
-                  width: 90,
-                  justifyContent: 'center',
-                  alignItems: 'flex-end',
-                }}
-              >
-                <Label title="SPENT" style={{ color: theme.formInputText }} />
+              <View style={{ alignItems: 'flex-end' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {!show3Cols && (
+                    <SvgViewShow
+                      width={12}
+                      height={12}
+                      style={{
+                        color: theme.pageTextSubdued,
+                        marginRight: 5,
+                      }}
+                    />
+                  )}
+                  <Label title="Spent" style={{ color: theme.formInputText }} />
+                </View>
                 <CellValue
                   binding={
                     type === 'report'
@@ -1309,194 +1817,77 @@ export function BudgetTable({
                       : rolloverBudget.totalSpent
                   }
                   type="financial"
-                  style={{
-                    ...styles.smallText,
-                    color: theme.formInputText,
-                    textAlign: 'right',
-                    fontWeight: '500',
-                  }}
+                  formatter={value => (
+                    <AutoTextSize
+                      key={value}
+                      as={Text}
+                      minFontSizePx={6}
+                      maxFontSizePx={12}
+                      mode="oneline"
+                      style={{
+                        maxWidth: columnWidth,
+                        color: theme.formInputText,
+                        paddingLeft: 5,
+                        textAlign: 'right',
+                        fontSize: 12,
+                        fontWeight: '500',
+                      }}
+                    >
+                      {format(value, 'financial')}
+                    </AutoTextSize>
+                  )}
                 />
               </View>
             </Button>
-          )}
-          <View
-            style={{
-              width: 90,
-              justifyContent: 'center',
-              alignItems: 'flex-end',
-            }}
-          >
-            <Label title="BALANCE" style={{ color: theme.formInputText }} />
-            <CellValue
-              binding={
-                type === 'report'
-                  ? reportBudget.totalLeftover
-                  : rolloverBudget.totalBalance
-              }
-              type="financial"
-              style={{
-                ...styles.smallText,
-                color: theme.formInputText,
-                textAlign: 'right',
-                fontWeight: '500',
-              }}
-            />
           </View>
-        </View>
-        <PullToRefresh onRefresh={onRefresh}>
-          {!editMode ? (
-            // <ScrollView
-            //   ref={el => (this.list = el)}
-            //   keyboardShouldPersistTaps="always"
-            //   refreshControl={refreshControl}
-            //   style={{ backgroundColor: colors.n10 }}
-            //   automaticallyAdjustContentInsets={false}
-            // >
-            <View
-              data-testid="budget-table"
-              style={{
-                paddingBottom: MOBILE_NAV_HEIGHT,
-              }}
-            >
-              <BudgetGroups
-                type={type}
-                categoryGroups={categoryGroups}
-                showBudgetedCol={!showSpentColumn}
-                show3Cols={show3Cols}
-                showHiddenCategories={showHiddenCategories}
-                // gestures={gestures}
-                month={month}
-                editMode={editMode}
-                onEditGroup={onEditGroup}
-                onEditCategory={onEditCategory}
-                onSaveCategory={onSaveCategory}
-                onDeleteCategory={onDeleteCategory}
-                onAddCategory={onAddCategory}
-                onAddGroup={onAddGroup}
-                onSaveGroup={onSaveGroup}
-                onDeleteGroup={onDeleteGroup}
-                onReorderCategory={onReorderCategory}
-                onReorderGroup={onReorderGroup}
-                onOpenMonthActionMenu={onOpenMonthActionMenu}
-                onBudgetAction={onBudgetAction}
-              />
-            </View>
-          ) : (
-            // </ScrollView>
-            // <DragDrop>
-            //   {({
-            //     dragging,
-            //     onGestureEvent,
-            //     onHandlerStateChange,
-            //     scrollRef,
-            //     onScroll
-            //   }) => (
-            <View data-testid="budget-table">
-              <BudgetGroups
-                type={type}
-                categoryGroups={categoryGroups}
-                showBudgetedCol={!showSpentColumn}
-                show3Cols={show3Cols}
-                showHiddenCategories={showHiddenCategories}
-                // gestures={gestures}
-                editMode={editMode}
-                onEditGroup={onEditGroup}
-                onEditCategory={onEditCategory}
-                onSaveCategory={onSaveCategory}
-                onDeleteCategory={onDeleteCategory}
-                onAddCategory={onAddCategory}
-                onAddGroup={onAddGroup}
-                onSaveGroup={onSaveGroup}
-                onDeleteGroup={onDeleteGroup}
-                onReorderCategory={onReorderCategory}
-                onReorderGroup={onReorderGroup}
-                onOpenMonthActionMenu={onOpenMonthActionMenu}
-                onBudgetAction={onBudgetAction}
-              />
-            </View>
-
-            // <DragDropHighlight />
-            // </DragDrop>
-          )}
-        </PullToRefresh>
-      </Page>
-    </NamespaceContext.Provider>
-  );
-}
-
-function BudgetPageMenu({
-  onEditMode,
-  onToggleHiddenCategories,
-  onSwitchBudgetType,
-}) {
-  const tooltip = useTooltip();
-  const isReportBudgetEnabled = useFeatureFlag('reportBudget');
-
-  const onMenuSelect = name => {
-    tooltip.close();
-    switch (name) {
-      case 'edit-mode':
-        onEditMode?.(true);
-        break;
-      case 'toggle-hidden-categories':
-        onToggleHiddenCategories?.();
-        break;
-      case 'switch-budget-type':
-        onSwitchBudgetType?.();
-        break;
-      default:
-        throw new Error(`Unrecognized menu option: ${name}`);
-    }
-  };
-
-  return (
-    <>
-      <Button
-        type="bare"
-        style={{
-          ...styles.noTapHighlight,
-        }}
-        hoveredStyle={{
-          color: theme.mobileHeaderText,
-          background: theme.mobileHeaderTextHover,
-        }}
-        {...tooltip.getOpenEvents()}
-      >
-        <SvgDotsHorizontalTriple
-          width="20"
-          height="20"
-          style={{ color: theme.mobileHeaderText }}
-        />
-      </Button>
-      {tooltip.isOpen && (
-        <Tooltip
-          position="bottom-right"
-          width={250}
-          style={{ padding: 0 }}
-          onClose={tooltip.close}
+        )}
+        <View
+          style={{
+            width: columnWidth,
+            alignItems: 'flex-end',
+          }}
         >
-          <Menu
-            onMenuSelect={onMenuSelect}
-            items={[
-              // Removing for now until we work on mobile category drag and drop.
-              // { name: 'edit-mode', text: 'Edit mode' },
-              {
-                name: 'toggle-hidden-categories',
-                text: 'Toggle hidden categories',
-              },
-              isReportBudgetEnabled && {
-                name: 'switch-budget-type',
-                text: 'Switch budget type',
-              },
-            ]}
+          <Label title="Balance" style={{ color: theme.formInputText }} />
+          <CellValue
+            binding={
+              type === 'report'
+                ? reportBudget.totalLeftover
+                : rolloverBudget.totalBalance
+            }
+            type="financial"
+            formatter={value => (
+              <AutoTextSize
+                key={value}
+                as={Text}
+                minFontSizePx={6}
+                maxFontSizePx={12}
+                mode="oneline"
+                style={{
+                  maxWidth: columnWidth,
+                  color: theme.formInputText,
+                  paddingLeft: 5,
+                  textAlign: 'right',
+                  fontSize: 12,
+                  fontWeight: '500',
+                }}
+              >
+                {format(value, 'financial')}
+              </AutoTextSize>
+            )}
           />
-        </Tooltip>
-      )}
-    </>
+        </View>
+      </View>
+    </View>
   );
 }
 
-function MonthSelector({ month, monthBounds, onPrevMonth, onNextMonth }) {
+function MonthSelector({
+  month,
+  monthBounds,
+  onOpenMonthMenu,
+  onPrevMonth,
+  onNextMonth,
+}) {
   const prevEnabled = month > monthBounds.start;
   const nextEnabled = month < monthUtils.subMonths(monthBounds.end, 1);
 
@@ -1536,10 +1927,12 @@ function MonthSelector({ month, monthBounds, onPrevMonth, onNextMonth }) {
           textAlign: 'center',
           fontSize: 16,
           fontWeight: 500,
+          margin: '0 5px',
+          ...styles.underlinedText,
         }}
+        onClick={() => onOpenMonthMenu?.(month)}
       >
-        {/* eslint-disable-next-line rulesdir/typography */}
-        {monthUtils.format(month, "MMMM ''yy")}
+        {monthUtils.format(month, 'MMMM ‘yy')}
       </Text>
       <Button
         type="bare"

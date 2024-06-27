@@ -134,12 +134,12 @@ export const RuleRow = memo(
                     >
                       <Text
                         style={{
-                          ...styles.verySmallText,
+                          ...styles.smallText,
                           color: theme.pageTextLight,
                           marginBottom: 6,
                         }}
                       >
-                        {i ? `Split ${i}` : 'Before split'}
+                        {i ? `Split ${i}` : 'Apply to all'}
                       </Text>
                       {split.actions.map((action, j) => (
                         <ActionExpression

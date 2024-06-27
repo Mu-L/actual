@@ -12,8 +12,6 @@ import {
   useHref,
 } from 'react-router-dom';
 
-import hotkeys from 'hotkeys-js';
-
 import { SpreadsheetProvider } from 'loot-core/src/client/SpreadsheetProvider';
 import { type State } from 'loot-core/src/client/state-types';
 import { checkForUpdateNotification } from 'loot-core/src/client/update-notification';
@@ -32,6 +30,7 @@ import { BudgetMonthCountProvider } from './budget/BudgetMonthCountContext';
 import { View } from './common/View';
 import { GlobalKeys } from './GlobalKeys';
 import { ManageRulesPage } from './ManageRulesPage';
+import { Category } from './mobile/budget/Category';
 import { MobileNavTabs } from './mobile/MobileNavTabs';
 import { TransactionEdit } from './mobile/transactions/TransactionEdit';
 import { Modals } from './Modals';
@@ -99,9 +98,6 @@ function RouterBehaviors() {
 function FinancesAppWithoutContext() {
   const actions = useActions();
   useEffect(() => {
-    // The default key handler scope
-    hotkeys.setScope('app');
-
     // Wait a little bit to make sure the sync button will get the
     // sync start event. This can be improved later.
     setTimeout(async () => {
@@ -167,15 +163,7 @@ function FinancesAppWithoutContext() {
               <Routes>
                 <Route path="/" element={<Navigate to="/budget" replace />} />
 
-                <Route
-                  path="/reports/*"
-                  element={
-                    <NarrowNotSupported>
-                      {/* Has its own lazy loading logic */}
-                      <Reports />
-                    </NarrowNotSupported>
-                  }
-                />
+                <Route path="/reports/*" element={<Reports />} />
 
                 <Route
                   path="/budget"
@@ -215,7 +203,7 @@ function FinancesAppWithoutContext() {
                 />
 
                 <Route
-                  path="/accounts/:id/transactions/:transactionId"
+                  path="/transactions/:transactionId"
                   element={
                     <WideNotSupported>
                       <TransactionEdit />
@@ -224,18 +212,10 @@ function FinancesAppWithoutContext() {
                 />
 
                 <Route
-                  path="/accounts/:id/transactions/new"
+                  path="/categories/:id"
                   element={
                     <WideNotSupported>
-                      <TransactionEdit />
-                    </WideNotSupported>
-                  }
-                />
-                <Route
-                  path="/transactions/new"
-                  element={
-                    <WideNotSupported>
-                      <TransactionEdit />
+                      <Category />
                     </WideNotSupported>
                   }
                 />
@@ -251,6 +231,7 @@ function FinancesAppWithoutContext() {
               <Route path="/budget" element={<MobileNavTabs />} />
               <Route path="/accounts" element={<MobileNavTabs />} />
               <Route path="/settings" element={<MobileNavTabs />} />
+              <Route path="/reports" element={<MobileNavTabs />} />
               <Route path="*" element={null} />
             </Routes>
           </View>

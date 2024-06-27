@@ -3,9 +3,9 @@ import { type numberFormats } from '../shared/util';
 export type FeatureFlag =
   | 'reportBudget'
   | 'goalTemplatesEnabled'
-  | 'customReports'
+  | 'spendingReport'
   | 'simpleFinSync'
-  | 'splitsInRules';
+  | 'iterableTopologicalSort';
 
 export type LocalPrefs = Partial<
   {
@@ -26,6 +26,7 @@ export type LocalPrefs = Partial<
     'expand-splits': boolean;
     [key: `show-extra-balances-${string}`]: boolean;
     [key: `hide-cleared-${string}`]: boolean;
+    [key: `hide-reconciled-${string}`]: boolean;
     'budget.collapsed': string[];
     'budget.summaryCollapsed': boolean;
     'budget.showHiddenCategories': boolean;
@@ -56,10 +57,12 @@ export type LocalPrefs = Partial<
   } & Record<`flags.${FeatureFlag}`, boolean>
 >;
 
-export type Theme = 'light' | 'dark' | 'auto' | 'midnight';
+export type Theme = 'light' | 'dark' | 'auto' | 'midnight' | 'development';
 export type GlobalPrefs = Partial<{
   floatingSidebar: boolean;
   maxMonths: number;
+  autoUpdate: boolean;
+  keyId?: string;
   theme: Theme;
   documentDir: string; // Electron only
 }>;

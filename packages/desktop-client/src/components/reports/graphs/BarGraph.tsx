@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import React from 'react';
+import React, { useState } from 'react';
 
 import { css } from 'glamor';
 import {
@@ -19,11 +19,19 @@ import {
   amountToCurrency,
   amountToCurrencyNoDecimal,
 } from 'loot-core/src/shared/util';
-import { type GroupedEntity } from 'loot-core/src/types/models/reports';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+} from 'loot-core/src/types/models/reports';
+import { type RuleConditionEntity } from 'loot-core/types/models/rule';
 
+import { useAccounts } from '../../../hooks/useAccounts';
+import { useCategories } from '../../../hooks/useCategories';
+import { useNavigate } from '../../../hooks/useNavigate';
 import { usePrivacyMode } from '../../../hooks/usePrivacyMode';
-import { theme } from '../../../style';
+import { useResponsive } from '../../../ResponsiveProvider';
 import { type CSSProperties } from '../../../style';
+import { theme } from '../../../style/index';
 import { AlignedText } from '../../common/AlignedText';
 import { Container } from '../Container';
 import { getCustomTick } from '../getCustomTick';
@@ -31,6 +39,7 @@ import { numberFormatterTooltip } from '../numberFormatter';
 
 import { adjustTextSize } from './adjustTextSize';
 import { renderCustomLabel } from './renderCustomLabel';
+import { showActivity } from './showActivity';
 
 type PayloadChild = {
   props: {
@@ -44,6 +53,8 @@ type PayloadItem = {
     name: string;
     totalAssets: number | string;
     totalDebts: number | string;
+    netAssets: number | string;
+    netDebts: number | string;
     totalTotals: number | string;
     networth: number | string;
     totalChange: number | string;
@@ -54,7 +65,7 @@ type PayloadItem = {
 type CustomTooltipProps = {
   active?: boolean;
   payload?: PayloadItem[];
-  balanceTypeOp?: string;
+  balanceTypeOp?: balanceTypeOpType;
   yAxis?: string;
 };
 
@@ -90,8 +101,20 @@ const CustomTooltip = ({
             )}
             {['totalDebts', 'totalTotals'].includes(balanceTypeOp) && (
               <AlignedText
-                left="Debt:"
+                left="Debts:"
                 right={amountToCurrency(payload[0].payload.totalDebts)}
+              />
+            )}
+            {['netAssets'].includes(balanceTypeOp) && (
+              <AlignedText
+                left="Net Assets:"
+                right={amountToCurrency(payload[0].payload.netAssets)}
+              />
+            )}
+            {['netDebts'].includes(balanceTypeOp) && (
+              <AlignedText
+                left="Net Debts:"
+                right={amountToCurrency(payload[0].payload.netDebts)}
               />
             )}
             {['totalTotals'].includes(balanceTypeOp) && (
@@ -117,44 +140,59 @@ const customLabel = (props, typeOp) => {
   const textAnchor = 'middle';
   const display =
     props.value !== 0 && `${amountToCurrencyNoDecimal(props.value)}`;
-  const textSize = adjustTextSize(
-    props.width,
-    typeOp === 'totalTotals' ? 'default' : 'variable',
-    props.value,
-  );
+  const textSize = adjustTextSize({
+    sized: props.width,
+    type: typeOp === 'totalTotals' ? 'default' : 'variable',
+    values: props.value,
+  });
 
   return renderCustomLabel(calcX, calcY, textAnchor, display, textSize);
 };
 
 type BarGraphProps = {
   style?: CSSProperties;
-  data: GroupedEntity;
+  data: DataEntity;
+  filters: RuleConditionEntity[];
   groupBy: string;
-  balanceTypeOp: string;
+  balanceTypeOp: balanceTypeOpType;
   compact?: boolean;
   viewLabels: boolean;
+  showHiddenCategories?: boolean;
+  showOffBudget?: boolean;
 };
 
 export function BarGraph({
   style,
   data,
+  filters,
   groupBy,
   balanceTypeOp,
   compact,
   viewLabels,
+  showHiddenCategories,
+  showOffBudget,
 }: BarGraphProps) {
+  const navigate = useNavigate();
+  const categories = useCategories();
+  const accounts = useAccounts();
   const privacyMode = usePrivacyMode();
+  const { isNarrowWidth } = useResponsive();
+  const [pointer, setPointer] = useState('');
 
   const yAxis = groupBy === 'Interval' ? 'date' : 'name';
   const splitData = groupBy === 'Interval' ? 'intervalData' : 'data';
   const labelsMargin = viewLabels ? 30 : 0;
 
   const getVal = obj => {
-    if (balanceTypeOp === 'totalDebts') {
-      return -1 * obj.totalDebts;
-    } else {
+    if (balanceTypeOp === 'totalTotals' && groupBy === 'Interval') {
       return obj.totalAssets;
     }
+
+    if (['totalDebts', 'netDebts'].includes(balanceTypeOp)) {
+      return -1 * obj[balanceTypeOp];
+    }
+
+    return obj[balanceTypeOp];
   };
 
   const longestLabelLength = data[splitData]
@@ -166,6 +204,7 @@ export function BarGraph({
     .reduce((acc, cur) => (Math.abs(cur) > Math.abs(acc) ? cur : acc), 0);
 
   const leftMargin = Math.abs(largestValue) > 1000000 ? 20 : 0;
+
   return (
     <Container
       style={{
@@ -183,6 +222,7 @@ export function BarGraph({
                 height={height}
                 stackOffset="sign"
                 data={data[splitData]}
+                style={{ cursor: pointer }}
                 margin={{
                   top: labelsMargin,
                   right: 0,
@@ -190,17 +230,19 @@ export function BarGraph({
                   bottom: 0,
                 }}
               >
-                <Tooltip
-                  cursor={{ fill: 'transparent' }}
-                  content={
-                    <CustomTooltip
-                      balanceTypeOp={balanceTypeOp}
-                      yAxis={yAxis}
-                    />
-                  }
-                  formatter={numberFormatterTooltip}
-                  isAnimationActive={false}
-                />
+                {(!isNarrowWidth || !compact) && (
+                  <Tooltip
+                    cursor={{ fill: 'transparent' }}
+                    content={
+                      <CustomTooltip
+                        balanceTypeOp={balanceTypeOp}
+                        yAxis={yAxis}
+                      />
+                    }
+                    formatter={numberFormatterTooltip}
+                    isAnimationActive={false}
+                  />
+                )}
                 {!compact && (
                   <>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -226,7 +268,33 @@ export function BarGraph({
                     <ReferenceLine y={0} stroke={theme.pageTextLight} />
                   </>
                 )}
-                <Bar dataKey={val => getVal(val)} stackId="a">
+                <Bar
+                  dataKey={val => getVal(val)}
+                  stackId="a"
+                  onMouseLeave={() => setPointer('')}
+                  onMouseEnter={() =>
+                    !['Group', 'Interval'].includes(groupBy) &&
+                    setPointer('pointer')
+                  }
+                  onClick={item =>
+                    !isNarrowWidth &&
+                    !['Group', 'Interval'].includes(groupBy) &&
+                    showActivity({
+                      navigate,
+                      categories,
+                      accounts,
+                      balanceTypeOp,
+                      filters,
+                      showHiddenCategories,
+                      showOffBudget,
+                      type: 'totals',
+                      startDate: data.startDate,
+                      endDate: data.endDate,
+                      field: groupBy.toLowerCase(),
+                      id: item.id,
+                    })
+                  }
+                >
                   {viewLabels && !compact && (
                     <LabelList
                       dataKey={val => getVal(val)}

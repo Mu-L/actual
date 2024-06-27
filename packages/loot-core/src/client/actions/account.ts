@@ -55,46 +55,28 @@ export function unlinkAccount(id: string) {
   };
 }
 
-export function linkAccount(requisitionId, account, upgradingId) {
+export function linkAccount(requisitionId, account, upgradingId, offBudget) {
   return async (dispatch: Dispatch) => {
     await send('gocardless-accounts-link', {
       requisitionId,
       account,
       upgradingId,
+      offBudget,
     });
     await dispatch(getPayees());
     await dispatch(getAccounts());
   };
 }
 
-export function linkAccountSimpleFin(externalAccount, upgradingId) {
+export function linkAccountSimpleFin(externalAccount, upgradingId, offBudget) {
   return async (dispatch: Dispatch) => {
     await send('simplefin-accounts-link', {
       externalAccount,
       upgradingId,
+      offBudget,
     });
     await dispatch(getPayees());
     await dispatch(getAccounts());
-  };
-}
-
-// TODO: type correctly or remove (unused)
-export function connectAccounts(
-  institution,
-  publicToken,
-  accountIds,
-  offbudgetIds,
-) {
-  return async (dispatch: Dispatch) => {
-    const ids = await send('accounts-connect', {
-      institution,
-      publicToken,
-      accountIds,
-      offbudgetIds,
-    });
-    await dispatch(getPayees());
-    await dispatch(getAccounts());
-    return ids;
   };
 }
 
@@ -125,7 +107,7 @@ export function syncAccounts(id?: string) {
 
       // Perform sync operation
       const { errors, newTransactions, matchedTransactions, updatedAccounts } =
-        await send('gocardless-accounts-sync', {
+        await send('accounts-bank-sync', {
           id: accountId,
         });
 
@@ -203,8 +185,17 @@ export function parseTransactions(filepath, options) {
   };
 }
 
-export function importTransactions(id, transactions) {
-  return async (dispatch: Dispatch) => {
+export function importTransactions(id: string, transactions, reconcile = true) {
+  return async (dispatch: Dispatch): Promise<boolean> => {
+    if (!reconcile) {
+      await send('api/transactions-add', {
+        accountId: id,
+        transactions,
+      });
+
+      return true;
+    }
+
     const {
       errors = [],
       added,
@@ -252,5 +243,6 @@ export function moveAccount(id, targetId) {
   return async (dispatch: Dispatch) => {
     await send('account-move', { id, targetId });
     dispatch(getAccounts());
+    dispatch(getPayees());
   };
 }

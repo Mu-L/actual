@@ -1,4 +1,3 @@
-// @ts-strict-ignore
 import React from 'react';
 
 import * as monthUtils from 'loot-core/src/shared/months';
@@ -7,18 +6,23 @@ import {
   integerToCurrency,
   amountToInteger,
 } from 'loot-core/src/shared/util';
-import { type GroupedEntity } from 'loot-core/src/types/models/reports';
+import {
+  type balanceTypeOpType,
+  type DataEntity,
+} from 'loot-core/src/types/models/reports';
 
 import { theme, styles } from '../../style';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { PrivacyFilter } from '../PrivacyFilter';
 
+import { ReportOptions } from './ReportOptions';
+
 type ReportSummaryProps = {
   startDate: string;
   endDate: string;
-  data: GroupedEntity;
-  balanceTypeOp: string;
+  data: DataEntity;
+  balanceTypeOp: balanceTypeOpType;
   interval: string;
   intervalsCount: number;
 };
@@ -32,9 +36,13 @@ export function ReportSummary({
   intervalsCount,
 }: ReportSummaryProps) {
   const net =
-    Math.abs(data.totalDebts) > Math.abs(data.totalAssets)
-      ? 'PAYMENT'
-      : 'DEPOSIT';
+    balanceTypeOp === 'netAssets'
+      ? 'DEPOSIT'
+      : balanceTypeOp === 'netDebts'
+        ? 'PAYMENT'
+        : Math.abs(data.totalDebts) > Math.abs(data.totalAssets)
+          ? 'PAYMENT'
+          : 'DEPOSIT';
   const average = amountToInteger(data[balanceTypeOp]) / intervalsCount;
   return (
     <View
@@ -59,8 +67,23 @@ export function ReportSummary({
             fontWeight: 600,
           }}
         >
-          {monthUtils.format(startDate, 'MMM yyyy')} -{' '}
-          {monthUtils.format(endDate, 'MMM yyyy')}
+          {monthUtils.format(
+            startDate,
+            ReportOptions.intervalFormat.get(interval) || '',
+          )}
+          {monthUtils.format(
+            startDate,
+            ReportOptions.intervalFormat.get(interval) || '',
+          ) !==
+            monthUtils.format(
+              endDate,
+              ReportOptions.intervalFormat.get(interval) || '',
+            ) &&
+            ' to ' +
+              monthUtils.format(
+                endDate,
+                ReportOptions.intervalFormat.get(interval) || '',
+              )}
         </Text>
       </View>
       <View
@@ -136,7 +159,7 @@ export function ReportSummary({
           </PrivacyFilter>
         </Text>
         <Text style={{ fontWeight: 600 }}>
-          Per {interval === 'Monthly' ? 'month' : 'year'}
+          Per {(ReportOptions.intervalMap.get(interval) || '').toLowerCase()}
         </Text>
       </View>
     </View>

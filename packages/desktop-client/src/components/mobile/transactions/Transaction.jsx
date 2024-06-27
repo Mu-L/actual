@@ -1,15 +1,20 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo } from 'react';
 
 import { getScheduledAmount } from 'loot-core/src/shared/schedules';
 import { isPreviewId } from 'loot-core/src/shared/transactions';
-import { integerToCurrency, groupById } from 'loot-core/src/shared/util';
+import { integerToCurrency } from 'loot-core/src/shared/util';
 
+import { useAccount } from '../../../hooks/useAccount';
+import { useCategories } from '../../../hooks/useCategories';
+import { usePayee } from '../../../hooks/usePayee';
+import { SvgSplit } from '../../../icons/v0';
 import {
   SvgArrowsSynchronize,
   SvgCheckCircle1,
   SvgLockClosed,
 } from '../../../icons/v2';
 import { styles, theme } from '../../../style';
+import { makeAmountFullStyle } from '../../budget/util';
 import { Button } from '../../common/Button';
 import { Text } from '../../common/Text';
 import { TextOneLine } from '../../common/TextOneLine';
@@ -41,38 +46,36 @@ ListItem.displayName = 'ListItem';
 
 export const Transaction = memo(function Transaction({
   transaction,
-  account,
-  accounts,
-  categories,
-  payees,
   added,
   onSelect,
   style,
 }) {
-  const accountsById = useMemo(() => groupById(accounts), [accounts]);
-  const payeesById = useMemo(() => groupById(payees), [payees]);
+  const { list: categories } = useCategories();
 
   const {
     id,
     payee: payeeId,
     amount: originalAmount,
     category: categoryId,
+    account: accountId,
     cleared,
     is_parent: isParent,
+    is_child: isChild,
     notes,
     schedule,
   } = transaction;
 
+  const payee = usePayee(payeeId);
+  const account = useAccount(accountId);
+  const transferAcct = useAccount(payee?.transfer_acct);
+
+  const isPreview = isPreviewId(id);
   let amount = originalAmount;
-  if (isPreviewId(id)) {
+  if (isPreview) {
     amount = getScheduledAmount(amount);
   }
 
   const categoryName = lookupName(categories, categoryId);
-
-  const payee = payeesById && payeeId && payeesById[payeeId];
-  const transferAcct =
-    payee && payee.transfer_acct && accountsById[payee.transfer_acct];
 
   const prettyDescription = getDescriptionPretty(
     transaction,
@@ -89,7 +92,6 @@ export const Transaction = memo(function Transaction({
 
   const prettyCategory = specialCategory || categoryName;
 
-  const isPreview = isPreviewId(id);
   const isReconciled = transaction.reconciled;
   const textStyle = isPreview && {
     fontStyle: 'italic',
@@ -103,16 +105,15 @@ export const Transaction = memo(function Transaction({
         backgroundColor: theme.tableBackground,
         border: 'none',
         width: '100%',
+        height: 60,
+        ...(isPreview && {
+          backgroundColor: theme.tableRowHeaderBackground,
+        }),
       }}
     >
       <ListItem
         style={{
           flex: 1,
-          height: 60,
-          padding: '5px 10px', // remove padding when Button is back
-          ...(isPreview && {
-            backgroundColor: theme.tableRowHeaderBackground,
-          }),
           ...style,
         }}
       >
@@ -174,6 +175,15 @@ export const Transaction = memo(function Transaction({
                   }}
                 />
               )}
+              {(isParent || isChild) && (
+                <SvgSplit
+                  style={{
+                    width: 12,
+                    height: 12,
+                    marginRight: 5,
+                  }}
+                />
+              )}
               <TextOneLine
                 style={{
                   fontSize: 11,
@@ -199,6 +209,7 @@ export const Transaction = memo(function Transaction({
             marginLeft: 25,
             marginRight: 5,
             fontSize: 14,
+            ...makeAmountFullStyle(amount),
           }}
         >
           {integerToCurrency(amount)}

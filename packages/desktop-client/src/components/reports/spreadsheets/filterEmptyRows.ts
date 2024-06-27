@@ -1,12 +1,18 @@
-// @ts-strict-ignore
-import { type GroupedEntity } from 'loot-core/src/types/models/reports';
+import {
+  type balanceTypeOpType,
+  type GroupedEntity,
+} from 'loot-core/src/types/models/reports';
 
-export function filterEmptyRows(
-  showEmpty: boolean,
-  data: GroupedEntity,
-  balanceTypeOp: string,
-): boolean {
-  let showHide;
+export function filterEmptyRows({
+  showEmpty,
+  data,
+  balanceTypeOp = 'totalDebts',
+}: {
+  showEmpty: boolean;
+  data: GroupedEntity;
+  balanceTypeOp?: balanceTypeOpType;
+}): boolean {
+  let showHide: boolean;
   if (balanceTypeOp === 'totalTotals') {
     showHide =
       data['totalDebts'] !== 0 ||

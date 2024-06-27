@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 
 import { replaceModal, syncAndDownload } from 'loot-core/src/client/actions';
 import * as queries from 'loot-core/src/client/queries';
 
 import { useAccounts } from '../../../hooks/useAccounts';
-import { useCategories } from '../../../hooks/useCategories';
+import { useFailedAccounts } from '../../../hooks/useFailedAccounts';
 import { useLocalPref } from '../../../hooks/useLocalPref';
 import { useNavigate } from '../../../hooks/useNavigate';
 import { useSetThemeColor } from '../../../hooks/useSetThemeColor';
 import { SvgAdd } from '../../../icons/v1';
 import { theme, styles } from '../../../style';
+import { makeAmountFullStyle } from '../../budget/util';
 import { Button } from '../../common/Button';
 import { Text } from '../../common/Text';
 import { TextOneLine } from '../../common/TextOneLine';
 import { View } from '../../common/View';
-import { Page } from '../../Page';
+import { MobilePageHeader, Page } from '../../Page';
 import { CellValue } from '../../spreadsheet/CellValue';
 import { MOBILE_NAV_HEIGHT } from '../MobileNavTabs';
 import { PullToRefresh } from '../PullToRefresh';
@@ -37,8 +38,7 @@ function AccountHeader({ name, amount, style = {} }) {
         <Text
           style={{
             ...styles.text,
-            textTransform: 'uppercase',
-            fontSize: 13,
+            fontSize: 14,
           }}
           data-testid="name"
         >
@@ -47,14 +47,22 @@ function AccountHeader({ name, amount, style = {} }) {
       </View>
       <CellValue
         binding={amount}
-        style={{ ...styles.text, fontSize: 13 }}
+        style={{ ...styles.text, fontSize: 14 }}
         type="financial"
       />
     </View>
   );
 }
 
-function AccountCard({ account, updated, getBalanceQuery, onSelect }) {
+function AccountCard({
+  account,
+  updated,
+  connected,
+  pending,
+  failed,
+  getBalanceQuery,
+  onSelect,
+}) {
   return (
     <View
       style={{
@@ -94,6 +102,22 @@ function AccountCard({ account, updated, getBalanceQuery, onSelect }) {
               alignItems: 'center',
             }}
           >
+            {account.bankId && (
+              <View
+                style={{
+                  backgroundColor: pending
+                    ? theme.sidebarItemBackgroundPending
+                    : failed
+                      ? theme.sidebarItemBackgroundFailed
+                      : theme.sidebarItemBackgroundPositive,
+                  marginRight: '8px',
+                  width: 8,
+                  height: 8,
+                  borderRadius: 8,
+                  opacity: connected ? 1 : 0,
+                }}
+              />
+            )}
             <TextOneLine
               style={{
                 ...styles.text,
@@ -106,24 +130,13 @@ function AccountCard({ account, updated, getBalanceQuery, onSelect }) {
             >
               {account.name}
             </TextOneLine>
-            {account.bankId && (
-              <View
-                style={{
-                  backgroundColor: theme.noticeBackgroundDark,
-                  marginLeft: '-23px',
-                  width: 8,
-                  height: 8,
-                  borderRadius: 8,
-                }}
-              />
-            )}
           </View>
         </View>
         <CellValue
           binding={getBalanceQuery(account)}
           type="financial"
           style={{ fontSize: 16, color: 'inherit' }}
-          getStyle={value => value < 0 && { color: 'inherit' }}
+          getStyle={makeAmountFullStyle}
           data-testid="account-balance"
         />
       </Button>
@@ -153,6 +166,8 @@ function AccountList({
   onSelectAccount,
   onSync,
 }) {
+  const failedAccounts = useFailedAccounts();
+  const syncingAccountIds = useSelector(state => state.account.accountsSyncing);
   const budgetedAccounts = accounts.filter(account => account.offbudget === 0);
   const offbudgetAccounts = accounts.filter(account => account.offbudget === 1);
   const noBackgroundColorStyle = {
@@ -162,25 +177,27 @@ function AccountList({
 
   return (
     <Page
-      title="Accounts"
-      headerRightContent={
-        <Button
-          type="bare"
-          style={{
-            color: theme.mobileHeaderText,
-            margin: 10,
-          }}
-          activeStyle={noBackgroundColorStyle}
-          hoveredStyle={noBackgroundColorStyle}
-          onClick={onAddAccount}
-        >
-          <SvgAdd width={20} height={20} />
-        </Button>
+      header={
+        <MobilePageHeader
+          title="Accounts"
+          rightContent={
+            <Button
+              type="bare"
+              style={{
+                color: theme.mobileHeaderText,
+                margin: 10,
+              }}
+              activeStyle={noBackgroundColorStyle}
+              hoveredStyle={noBackgroundColorStyle}
+              onClick={onAddAccount}
+            >
+              <SvgAdd width={20} height={20} />
+            </Button>
+          }
+        />
       }
       padding={0}
       style={{
-        flex: 1,
-        backgroundColor: theme.mobilePageBackground,
         paddingBottom: MOBILE_NAV_HEIGHT,
       }}
     >
@@ -194,7 +211,10 @@ function AccountList({
             <AccountCard
               account={acct}
               key={acct.id}
-              updated={updatedAccounts.includes(acct.id)}
+              updated={updatedAccounts && updatedAccounts.includes(acct.id)}
+              connected={!!acct.bank}
+              pending={syncingAccountIds.includes(acct.id)}
+              failed={failedAccounts && failedAccounts.has(acct.id)}
               getBalanceQuery={getBalanceQuery}
               onSelect={onSelectAccount}
             />
@@ -202,7 +222,7 @@ function AccountList({
 
           {offbudgetAccounts.length > 0 && (
             <AccountHeader
-              name="Off budget"
+              name="Off Budget"
               amount={getOffBudgetBalance()}
               style={{ marginTop: 30 }}
             />
@@ -211,7 +231,10 @@ function AccountList({
             <AccountCard
               account={acct}
               key={acct.id}
-              updated={updatedAccounts.includes(acct.id)}
+              updated={updatedAccounts && updatedAccounts.includes(acct.id)}
+              connected={!!acct.bank}
+              pending={syncingAccountIds.includes(acct.id)}
+              failed={failedAccounts && failedAccounts.has(acct.id)}
               getBalanceQuery={getBalanceQuery}
               onSelect={onSelectAccount}
             />
@@ -225,23 +248,15 @@ function AccountList({
 export function Accounts() {
   const dispatch = useDispatch();
   const accounts = useAccounts();
-  const newTransactions = useSelector(state => state.queries.newTransactions);
   const updatedAccounts = useSelector(state => state.queries.updatedAccounts);
   const [_numberFormat] = useLocalPref('numberFormat');
   const numberFormat = _numberFormat || 'comma-dot';
   const [hideFraction = false] = useLocalPref('hideFraction');
 
-  const { list: categories } = useCategories();
-
-  const transactions = useState({});
   const navigate = useNavigate();
 
   const onSelectAccount = id => {
     navigate(`/accounts/${id}`);
-  };
-
-  const onSelectTransaction = transaction => {
-    navigate(`/transaction/${transaction}`);
   };
 
   const onAddAccount = () => {
@@ -261,16 +276,12 @@ export function Accounts() {
         // format changes
         key={numberFormat + hideFraction}
         accounts={accounts.filter(account => !account.closed)}
-        categories={categories}
-        transactions={transactions || []}
         updatedAccounts={updatedAccounts}
-        newTransactions={newTransactions}
         getBalanceQuery={queries.accountBalance}
         getOnBudgetBalance={queries.budgetedAccountBalance}
         getOffBudgetBalance={queries.offbudgetAccountBalance}
         onAddAccount={onAddAccount}
         onSelectAccount={onSelectAccount}
-        onSelectTransaction={onSelectTransaction}
         onSync={onSync}
       />
     </View>

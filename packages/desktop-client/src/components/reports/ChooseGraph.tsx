@@ -1,12 +1,10 @@
-// @ts-strict-ignore
-import React, { useRef } from 'react';
+import React, { type UIEvent, useRef } from 'react';
 
-import * as monthUtils from 'loot-core/src/shared/months';
-import { type GroupedEntity } from 'loot-core/src/types/models/reports';
+import { type DataEntity } from 'loot-core/src/types/models/reports';
+import { type RuleConditionEntity } from 'loot-core/types/models/rule';
 
 import { type CSSProperties } from '../../style';
 import { styles } from '../../style/styles';
-import { View } from '../common/View';
 
 import { AreaGraph } from './graphs/AreaGraph';
 import { BarGraph } from './graphs/BarGraph';
@@ -15,14 +13,11 @@ import { DonutGraph } from './graphs/DonutGraph';
 import { LineGraph } from './graphs/LineGraph';
 import { StackedBarGraph } from './graphs/StackedBarGraph';
 import { ReportTable } from './graphs/tableGraph/ReportTable';
-import { ReportTableHeader } from './graphs/tableGraph/ReportTableHeader';
-import { ReportTableTotals } from './graphs/tableGraph/ReportTableTotals';
 import { ReportOptions } from './ReportOptions';
 
 type ChooseGraphProps = {
-  startDate: string;
-  endDate: string;
-  data: GroupedEntity;
+  data: DataEntity;
+  filters?: RuleConditionEntity[];
   mode: string;
   graphType: string;
   balanceType: string;
@@ -30,57 +25,72 @@ type ChooseGraphProps = {
   interval: string;
   setScrollWidth?: (value: number) => void;
   viewLabels?: boolean;
-  compact?: boolean;
+  compact: boolean;
   style?: CSSProperties;
+  showHiddenCategories?: boolean;
+  showOffBudget?: boolean;
+  intervalsCount: number;
 };
 
 export function ChooseGraph({
-  startDate,
-  endDate,
   data,
+  filters = [],
   mode,
   graphType,
   balanceType,
   groupBy,
   interval,
   setScrollWidth,
-  viewLabels,
+  viewLabels = false,
   compact,
   style,
+  showHiddenCategories = false,
+  showOffBudget = false,
+  intervalsCount,
 }: ChooseGraphProps) {
-  const intervals: string[] = monthUtils.rangeInclusive(startDate, endDate);
-  const graphStyle = compact ? { ...style } : { flexGrow: 1 };
-  const balanceTypeOp = ReportOptions.balanceTypeMap.get(balanceType);
-  const groupByData =
-    groupBy === 'Category'
-      ? 'groupedData'
-      : groupBy === 'Interval'
-        ? 'intervalData'
-        : 'data';
+  const graphStyle = compact
+    ? { ...style }
+    : { flexGrow: 1, overflow: 'hidden' };
+  const balanceTypeOp =
+    ReportOptions.balanceTypeMap.get(balanceType) || 'totalDebts';
 
-  const saveScrollWidth = value => {
-    setScrollWidth(!value ? 0 : value);
+  const saveScrollWidth = (value: number) => {
+    setScrollWidth?.(value || 0);
   };
 
-  const rowStyle = compact && { flex: '0 0 20px', height: 20 };
-  const compactStyle = compact && { ...styles.tinyText };
+  const rowStyle: CSSProperties = compact
+    ? { flex: '0 0 20px', height: 20 }
+    : {};
+  const compactStyle: CSSProperties = compact ? { ...styles.tinyText } : {};
 
   const headerScrollRef = useRef<HTMLDivElement>(null);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const totalScrollRef = useRef<HTMLDivElement>(null);
 
-  const handleScroll = scroll => {
-    if (scroll.target.id === 'header') {
-      totalScrollRef.current.scrollLeft = scroll.target.scrollLeft;
-      listScrollRef.current.scrollLeft = scroll.target.scrollLeft;
+  const handleScroll = (scroll: UIEvent<HTMLDivElement>) => {
+    if (
+      scroll.currentTarget.id === 'header' &&
+      totalScrollRef.current &&
+      listScrollRef.current
+    ) {
+      totalScrollRef.current.scrollLeft = scroll.currentTarget.scrollLeft;
+      listScrollRef.current.scrollLeft = scroll.currentTarget.scrollLeft;
     }
-    if (scroll.target.id === 'total') {
-      headerScrollRef.current.scrollLeft = scroll.target.scrollLeft;
-      listScrollRef.current.scrollLeft = scroll.target.scrollLeft;
+    if (
+      scroll.currentTarget.id === 'total' &&
+      headerScrollRef.current &&
+      listScrollRef.current
+    ) {
+      headerScrollRef.current.scrollLeft = scroll.currentTarget.scrollLeft;
+      listScrollRef.current.scrollLeft = scroll.currentTarget.scrollLeft;
     }
-    if (scroll.target.id === 'list') {
-      headerScrollRef.current.scrollLeft = scroll.target.scrollLeft;
-      totalScrollRef.current.scrollLeft = scroll.target.scrollLeft;
+    if (
+      scroll.currentTarget.id === 'list' &&
+      totalScrollRef.current &&
+      headerScrollRef.current
+    ) {
+      headerScrollRef.current.scrollLeft = scroll.currentTarget.scrollLeft;
+      totalScrollRef.current.scrollLeft = scroll.currentTarget.scrollLeft;
     }
   };
 
@@ -101,16 +111,17 @@ export function ChooseGraph({
         style={graphStyle}
         compact={compact}
         data={data}
+        filters={filters}
         groupBy={groupBy}
         balanceTypeOp={balanceTypeOp}
         viewLabels={viewLabels}
+        showHiddenCategories={showHiddenCategories}
+        showOffBudget={showOffBudget}
       />
     );
   }
   if (graphType === 'BarLineGraph') {
-    return (
-      <BarLineGraph style={graphStyle} compact={compact} graphData={data} />
-    );
+    return <BarLineGraph style={graphStyle} compact={compact} data={data} />;
   }
   if (graphType === 'DonutGraph') {
     return (
@@ -118,14 +129,29 @@ export function ChooseGraph({
         style={graphStyle}
         compact={compact}
         data={data}
+        filters={filters}
         groupBy={groupBy}
         balanceTypeOp={balanceTypeOp}
         viewLabels={viewLabels}
+        showHiddenCategories={showHiddenCategories}
+        showOffBudget={showOffBudget}
       />
     );
   }
   if (graphType === 'LineGraph') {
-    return <LineGraph style={graphStyle} compact={compact} graphData={data} />;
+    return (
+      <LineGraph
+        style={graphStyle}
+        compact={compact}
+        data={data}
+        filters={filters}
+        groupBy={groupBy}
+        balanceTypeOp={balanceTypeOp}
+        showHiddenCategories={showHiddenCategories}
+        showOffBudget={showOffBudget}
+        interval={interval}
+      />
+    );
   }
   if (graphType === 'StackedBarGraph') {
     return (
@@ -133,50 +159,37 @@ export function ChooseGraph({
         style={graphStyle}
         compact={compact}
         data={data}
+        filters={filters}
         viewLabels={viewLabels}
         balanceTypeOp={balanceTypeOp}
+        groupBy={groupBy}
+        showHiddenCategories={showHiddenCategories}
+        showOffBudget={showOffBudget}
+        interval={interval}
       />
     );
   }
   if (graphType === 'TableGraph') {
     return (
-      <View>
-        <ReportTableHeader
-          headerScrollRef={headerScrollRef}
-          handleScroll={handleScroll}
-          data={mode === 'time' && data.intervalData}
-          groupBy={groupBy}
-          interval={interval}
-          balanceType={balanceType}
-          compact={compact}
-          style={rowStyle}
-          compactStyle={compactStyle}
-        />
-        <ReportTable
-          saveScrollWidth={saveScrollWidth}
-          listScrollRef={listScrollRef}
-          handleScroll={handleScroll}
-          balanceTypeOp={balanceTypeOp}
-          groupBy={groupBy}
-          data={data[groupByData]}
-          mode={mode}
-          intervalsCount={intervals.length}
-          compact={compact}
-          style={rowStyle}
-          compactStyle={compactStyle}
-        />
-        <ReportTableTotals
-          totalScrollRef={totalScrollRef}
-          handleScroll={handleScroll}
-          data={data}
-          mode={mode}
-          balanceTypeOp={balanceTypeOp}
-          intervalsCount={intervals.length}
-          compact={compact}
-          style={rowStyle}
-          compactStyle={compactStyle}
-        />
-      </View>
+      <ReportTable
+        saveScrollWidth={saveScrollWidth}
+        headerScrollRef={headerScrollRef}
+        listScrollRef={listScrollRef}
+        totalScrollRef={totalScrollRef}
+        handleScroll={handleScroll}
+        balanceTypeOp={balanceTypeOp}
+        groupBy={groupBy}
+        data={data}
+        filters={filters}
+        mode={mode}
+        intervalsCount={intervalsCount}
+        interval={interval}
+        compact={compact}
+        style={rowStyle}
+        compactStyle={compactStyle}
+        showHiddenCategories={showHiddenCategories}
+        showOffBudget={showOffBudget}
+      />
     );
   }
   return null;

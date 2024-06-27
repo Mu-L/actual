@@ -30,7 +30,6 @@ import {
 } from 'loot-core/src/shared/util';
 
 import { useDateFormat } from '../../hooks/useDateFormat';
-import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useSelected, SelectedProvider } from '../../hooks/useSelected';
 import { SvgDelete, SvgAdd, SvgSubtract } from '../../icons/v0';
 import { SvgInformationOutline } from '../../icons/v1';
@@ -40,9 +39,9 @@ import { Modal } from '../common/Modal';
 import { Select } from '../common/Select';
 import { Stack } from '../common/Stack';
 import { Text } from '../common/Text';
+import { Tooltip } from '../common/Tooltip';
 import { View } from '../common/View';
 import { StatusBadge } from '../schedules/StatusBadge';
-import { Tooltip } from '../tooltips';
 import { SimpleTransactionsTable } from '../transactions/SimpleTransactionsTable';
 import { BetweenAmountInput } from '../util/AmountInput';
 import { DisplayId } from '../util/DisplayId';
@@ -104,10 +103,13 @@ export function OpSelect({
   onChange,
 }) {
   let line;
-  // We don't support the `contains` operator for the id type for
+  // We don't support the `contains, `doesNotContain`, `matches` operators for the id type for
   // rules yet
+  // TODO: Add matches op support for payees, accounts, categories.
   if (type === 'id') {
-    ops = ops.filter(op => op !== 'contains' && op !== 'doesNotContain');
+    ops = ops.filter(
+      op => op !== 'contains' && op !== 'matches' && op !== 'doesNotContain',
+    );
     line = ops.length / 2;
   }
   if (type === 'string') {
@@ -236,6 +238,7 @@ function ConditionEditor({
         value={value}
         multi={op === 'oneOf' || op === 'notOneOf'}
         onChange={v => onChange('value', v)}
+        numberFormatType="currency"
       />
     );
   }
@@ -366,6 +369,7 @@ function ActionEditor({ action, editorStyle, onChange, onDelete, onAdd }) {
               op={op}
               value={value}
               onChange={v => onChange('value', v)}
+              numberFormatType="currency"
             />
           </View>
         </>
@@ -387,6 +391,9 @@ function ActionEditor({ action, editorStyle, onChange, onDelete, onAdd }) {
                 key={inputKey}
                 field={field}
                 type="number"
+                numberFormatType={
+                  options.method === 'fixed-percent' ? 'percentage' : 'currency'
+                }
                 value={value}
                 onChange={v => onChange('value', v)}
               />
@@ -415,33 +422,29 @@ function ActionEditor({ action, editorStyle, onChange, onDelete, onAdd }) {
 }
 
 function StageInfo() {
-  const [open, setOpen] = useState();
-
   return (
     <View style={{ position: 'relative', marginLeft: 5 }}>
-      <View
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
+      <Tooltip
+        content={
+          <>
+            The stage of a rule allows you to force a specific order. Pre rules
+            always run first, and post rules always run last. Within each stage
+            rules are automatically ordered from least to most specific.
+          </>
+        }
+        placement="bottom start"
+        style={{
+          ...styles.tooltip,
+          padding: 10,
+          color: theme.pageTextLight,
+          maxWidth: 450,
+          lineHeight: 1.5,
+        }}
       >
         <SvgInformationOutline
           style={{ width: 11, height: 11, color: theme.pageTextLight }}
         />
-      </View>
-      {open && (
-        <Tooltip
-          position="bottom-left"
-          style={{
-            padding: 10,
-            color: theme.pageTextLight,
-            maxWidth: 450,
-            lineHeight: 1.5,
-          }}
-        >
-          The stage of a rule allows you to force a specific order. Pre rules
-          always run first, and post rules always run last. Within each stage
-          rules are automatically ordered from least to most specific.
-        </Tooltip>
-      )}
+      </Tooltip>
     </View>
   );
 }
@@ -659,7 +662,6 @@ const conditionFields = [
   ]);
 
 export function EditRule({ modalProps, defaultRule, onSave: originalOnSave }) {
-  const splitsEnabled = useFeatureFlag('splitsInRules');
   const [conditions, setConditions] = useState(
     defaultRule.conditions.map(parse),
   );
@@ -887,14 +889,11 @@ export function EditRule({ modalProps, defaultRule, onSave: originalOnSave }) {
   };
 
   // Enable editing existing split rules even if the feature has since been disabled.
-  const showSplitButton = splitsEnabled
-    ? actionSplits.length > 0
-    : actionSplits.length > 1;
+  const showSplitButton = actionSplits.length > 0;
 
   return (
     <Modal
       title="Rule"
-      padding={0}
       {...modalProps}
       style={{ ...modalProps.style, flex: 'inherit' }}
     >
@@ -1015,12 +1014,12 @@ export function EditRule({ modalProps, defaultRule, onSave: originalOnSave }) {
                         >
                           <Text
                             style={{
-                              ...styles.verySmallText,
+                              ...styles.smallText,
                               marginBottom: '10px',
                             }}
                           >
                             {splitIndex === 0
-                              ? 'Before split'
+                              ? 'Apply to all'
                               : `Split ${splitIndex}`}
                           </Text>
                           {splitIndex && (
@@ -1085,6 +1084,7 @@ export function EditRule({ modalProps, defaultRule, onSave: originalOnSave }) {
                     onClick={() => {
                       addActionToSplitAfterIndex(actionSplits.length, -1);
                     }}
+                    data-testid="add-split-transactions"
                   >
                     {actionSplits.length > 1
                       ? 'Add another split'

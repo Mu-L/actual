@@ -1,14 +1,15 @@
 // @ts-strict-ignore
 import React, {
   forwardRef,
-  useState,
-  useRef,
   useEffect,
-  useLayoutEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
-  type MutableRefObject,
+  useRef,
+  useState,
+  type ComponentProps,
   type KeyboardEvent,
+  type MutableRefObject,
 } from 'react';
 
 import { parse, parseISO, format, subDays, addDays, isValid } from 'date-fns';
@@ -26,10 +27,10 @@ import {
 import { stringToInteger } from 'loot-core/src/shared/util';
 
 import { useLocalPref } from '../../hooks/useLocalPref';
-import { type CSSProperties, theme } from '../../style';
-import { Input, type InputProps } from '../common/Input';
-import { View, type ViewProps } from '../common/View';
-import { Tooltip } from '../tooltips';
+import { theme } from '../../style';
+import { Input } from '../common/Input';
+import { Popover } from '../common/Popover';
+import { View } from '../common/View';
 
 import DateSelectLeft from './DateSelect.left.png';
 import DateSelectRight from './DateSelect.right.png';
@@ -171,9 +172,8 @@ function defaultShouldSaveFromKey(e) {
 }
 
 type DateSelectProps = {
-  containerProps?: ViewProps;
-  inputProps?: InputProps;
-  tooltipStyle?: CSSProperties;
+  containerProps?: ComponentProps<typeof View>;
+  inputProps?: ComponentProps<typeof Input>;
   value: string;
   isOpen?: boolean;
   embedded?: boolean;
@@ -182,7 +182,7 @@ type DateSelectProps = {
   openOnFocus?: boolean;
   inputRef?: MutableRefObject<HTMLInputElement>;
   shouldSaveFromKey?: (e: KeyboardEvent<HTMLInputElement>) => boolean;
-  tableBehavior?: boolean;
+  clearOnBlur?: boolean;
   onUpdate?: (selectedDate: string) => void;
   onSelect: (selectedDate: string) => void;
 };
@@ -190,7 +190,6 @@ type DateSelectProps = {
 export function DateSelect({
   containerProps,
   inputProps,
-  tooltipStyle,
   value: defaultValue,
   isOpen,
   embedded,
@@ -199,7 +198,7 @@ export function DateSelect({
   openOnFocus = true,
   inputRef: originalInputRef,
   shouldSaveFromKey = defaultShouldSaveFromKey,
-  tableBehavior,
+  clearOnBlur = true,
   onUpdate,
   onSelect,
 }: DateSelectProps) {
@@ -322,17 +321,23 @@ export function DateSelect({
   }
 
   const maybeWrapTooltip = content => {
-    return embedded ? (
-      content
-    ) : (
-      <Tooltip
-        position="bottom-left"
+    if (embedded) {
+      return open ? content : null;
+    }
+
+    return (
+      <Popover
+        triggerRef={inputRef}
+        placement="bottom start"
         offset={2}
-        style={{ padding: 0, minWidth: 225, ...tooltipStyle }}
+        isOpen={open}
+        isNonModal
+        onOpenChange={() => setOpen(false)}
+        style={{ minWidth: 225 }}
         data-testid="date-select-tooltip"
       >
         {content}
-      </Tooltip>
+      </Popover>
     );
   };
 
@@ -362,7 +367,7 @@ export function DateSelect({
           }
           inputProps?.onBlur?.(e);
 
-          if (!tableBehavior) {
+          if (clearOnBlur) {
             // If value is empty, that drives what gets selected.
             // Otherwise the input is reset to whatever is already
             // selected
@@ -380,24 +385,23 @@ export function DateSelect({
           }
         }}
       />
-      {open &&
-        maybeWrapTooltip(
-          <DatePicker
-            ref={picker}
-            value={selectedValue}
-            firstDayOfWeekIdx={firstDayOfWeekIdx}
-            dateFormat={dateFormat}
-            onUpdate={date => {
-              setSelectedValue(format(date, dateFormat));
-              onUpdate?.(format(date, 'yyyy-MM-dd'));
-            }}
-            onSelect={date => {
-              setValue(format(date, dateFormat));
-              onSelect(format(date, 'yyyy-MM-dd'));
-              setOpen(false);
-            }}
-          />,
-        )}
+      {maybeWrapTooltip(
+        <DatePicker
+          ref={picker}
+          value={selectedValue}
+          firstDayOfWeekIdx={firstDayOfWeekIdx}
+          dateFormat={dateFormat}
+          onUpdate={date => {
+            setSelectedValue(format(date, dateFormat));
+            onUpdate?.(format(date, 'yyyy-MM-dd'));
+          }}
+          onSelect={date => {
+            setValue(format(date, dateFormat));
+            onSelect(format(date, 'yyyy-MM-dd'));
+            setOpen(false);
+          }}
+        />,
+      )}
     </View>
   );
 }

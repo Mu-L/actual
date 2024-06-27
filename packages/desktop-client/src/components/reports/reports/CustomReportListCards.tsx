@@ -1,50 +1,24 @@
-import React, { createRef, useMemo, useState } from 'react';
-import { ErrorBoundary } from 'react-error-boundary';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { send, sendCatch } from 'loot-core/platform/client/fetch/index';
+import * as monthUtils from 'loot-core/src/shared/months';
 import { type CustomReportEntity } from 'loot-core/types/models/reports';
 
+import { useAccounts } from '../../../hooks/useAccounts';
+import { useCategories } from '../../../hooks/useCategories';
+import { useLocalPref } from '../../../hooks/useLocalPref';
+import { usePayees } from '../../../hooks/usePayees';
+import { useResponsive } from '../../../ResponsiveProvider';
 import { styles } from '../../../style/index';
 import { theme } from '../../../style/theme';
 import { Block } from '../../common/Block';
-import { Menu } from '../../common/Menu';
-import { MenuButton } from '../../common/MenuButton';
-import { MenuTooltip } from '../../common/MenuTooltip';
 import { Text } from '../../common/Text';
 import { View } from '../../common/View';
-import { ChooseGraph } from '../ChooseGraph';
 import { DateRange } from '../DateRange';
-import { LoadingIndicator } from '../LoadingIndicator';
 import { ReportCard } from '../ReportCard';
-import { SaveReportName } from '../SaveReportName';
 
-type CardMenuProps = {
-  onClose: () => void;
-  onMenuSelect: (item: string, report: CustomReportEntity) => void;
-  report: CustomReportEntity;
-};
-
-function CardMenu({ onClose, onMenuSelect, report }: CardMenuProps) {
-  return (
-    <MenuTooltip onClose={onClose} width={120}>
-      <Menu
-        onMenuSelect={item => {
-          onMenuSelect(item, report);
-        }}
-        items={[
-          {
-            name: 'rename',
-            text: 'Rename report',
-          },
-          {
-            name: 'delete',
-            text: 'Delete report',
-          },
-        ]}
-      />
-    </MenuTooltip>
-  );
-}
+import { GetCardData } from './GetCardData';
+import { ListCardsPopover } from './ListCardsPopover';
 
 function index(data: CustomReportEntity[]): { [key: string]: boolean }[] {
   return data.reduce((carry, report) => {
@@ -57,19 +31,6 @@ function index(data: CustomReportEntity[]): { [key: string]: boolean }[] {
   }, []);
 }
 
-function ErrorFallback() {
-  return (
-    <>
-      <div>
-        <br />
-      </div>
-      <Text style={{ ...styles.mediumText, color: theme.errorText }}>
-        There was a problem loading your report
-      </Text>
-    </>
-  );
-}
-
 export function CustomReportListCards({
   reports,
 }: {
@@ -77,12 +38,34 @@ export function CustomReportListCards({
 }) {
   const result: { [key: string]: boolean }[] = index(reports);
   const [reportMenu, setReportMenu] = useState(result);
+  const [deleteMenuOpen, setDeleteMenuOpen] = useState(result);
   const [nameMenuOpen, setNameMenuOpen] = useState(result);
   const [err, setErr] = useState('');
   const [name, setName] = useState('');
-  const inputRef = createRef<HTMLInputElement>();
+  const [earliestTransaction, setEarliestTransaction] = useState('');
+
+  const payees = usePayees();
+  const accounts = useAccounts();
+  const categories = useCategories();
+  const { isNarrowWidth } = useResponsive();
+  const [_firstDayOfWeekIdx] = useLocalPref('firstDayOfWeekIdx');
+  const firstDayOfWeekIdx = _firstDayOfWeekIdx || '0';
 
   const [isCardHovered, setIsCardHovered] = useState('');
+
+  const onDelete = async (reportData: string) => {
+    setName('');
+    await send('report/delete', reportData);
+    onDeleteMenuOpen(reportData === undefined ? '' : reportData, false);
+  };
+
+  useEffect(() => {
+    async function run() {
+      const trans = await send('get-earliest-transaction');
+      setEarliestTransaction(trans ? trans.date : monthUtils.currentDay());
+    }
+    run();
+  }, []);
 
   const onAddUpdate = async ({
     reportData,
@@ -112,7 +95,8 @@ export function CustomReportListCards({
   const onMenuSelect = async (item: string, report: CustomReportEntity) => {
     if (item === 'delete') {
       onMenuOpen(report.id, false);
-      await send('report/delete', report.id);
+      onDeleteMenuOpen(report.id, true);
+      setErr('');
     }
     if (item === 'rename') {
       onMenuOpen(report.id, false);
@@ -124,6 +108,10 @@ export function CustomReportListCards({
 
   const onMenuOpen = (item: string, state: boolean) => {
     setReportMenu({ ...reportMenu, [item]: state });
+  };
+
+  const onDeleteMenuOpen = (item: string, state: boolean) => {
+    setDeleteMenuOpen({ ...deleteMenuOpen, [item]: state });
   };
 
   const onNameMenuOpen = (item: string, state: boolean) => {
@@ -152,12 +140,24 @@ export function CustomReportListCards({
           key={i}
           style={{
             flex: '0 0 auto',
-            flexDirection: 'row',
+            flexDirection: isNarrowWidth ? 'column' : 'row',
           }}
         >
           {group &&
             group.map((report, id) => (
-              <View key={id} style={{ position: 'relative', flex: '1' }}>
+              <View
+                key={id}
+                style={
+                  !isNarrowWidth
+                    ? {
+                        position: 'relative',
+                        flex: '1',
+                      }
+                    : {
+                        position: 'relative',
+                      }
+                }
+              >
                 <View style={{ width: '100%', height: '100%' }}>
                   <ReportCard to="/reports/custom" report={report}>
                     <View
@@ -177,7 +177,6 @@ export function CustomReportListCards({
                     >
                       <View
                         style={{
-                          flexDirection: 'row',
                           flexShrink: 0,
                           paddingBottom: 5,
                         }}
@@ -205,25 +204,14 @@ export function CustomReportListCards({
                           )}
                         </View>
                       </View>
-
-                      {report.data ? (
-                        <ErrorBoundary FallbackComponent={ErrorFallback}>
-                          <ChooseGraph
-                            startDate={report.startDate}
-                            endDate={report.endDate}
-                            data={report.data}
-                            mode={report.mode}
-                            graphType={report.graphType}
-                            balanceType={report.balanceType}
-                            groupBy={report.groupBy}
-                            interval={report.interval}
-                            compact={true}
-                            style={{ height: 'auto', flex: 1 }}
-                          />
-                        </ErrorBoundary>
-                      ) : (
-                        <LoadingIndicator />
-                      )}
+                      <GetCardData
+                        report={report}
+                        payees={payees}
+                        accounts={accounts}
+                        categories={categories}
+                        earliestTransaction={earliestTransaction}
+                        firstDayOfWeekIdx={firstDayOfWeekIdx}
+                      />
                     </View>
                   </ReportCard>
                 </View>
@@ -235,48 +223,22 @@ export function CustomReportListCards({
                     top: 25,
                   }}
                 >
-                  <MenuButton
-                    onClick={() =>
-                      onMenuOpen(report.id === undefined ? '' : report.id, true)
-                    }
-                    style={{
-                      color:
-                        isCardHovered === report.id ? 'inherit' : 'transparent',
-                    }}
+                  <ListCardsPopover
+                    report={report}
+                    onMenuOpen={onMenuOpen}
+                    isCardHovered={isCardHovered}
+                    reportMenu={reportMenu}
+                    onMenuSelect={onMenuSelect}
+                    nameMenuOpen={nameMenuOpen}
+                    name={name}
+                    setName={setName}
+                    onAddUpdate={onAddUpdate}
+                    err={err}
+                    onNameMenuOpen={onNameMenuOpen}
+                    deleteMenuOpen={deleteMenuOpen}
+                    onDeleteMenuOpen={onDeleteMenuOpen}
+                    onDelete={onDelete}
                   />
-                  {report.id === undefined
-                    ? null
-                    : reportMenu[report.id as keyof typeof reportMenu] && (
-                        <CardMenu
-                          onMenuSelect={onMenuSelect}
-                          onClose={() =>
-                            onMenuOpen(
-                              report.id === undefined ? '' : report.id,
-                              false,
-                            )
-                          }
-                          report={report}
-                        />
-                      )}
-                  {report.id === undefined
-                    ? null
-                    : nameMenuOpen[report.id as keyof typeof nameMenuOpen] && (
-                        <SaveReportName
-                          onClose={() =>
-                            onNameMenuOpen(
-                              report.id === undefined ? '' : report.id,
-                              false,
-                            )
-                          }
-                          menuItem="rename"
-                          name={name}
-                          setName={setName}
-                          inputRef={inputRef}
-                          onAddUpdate={onAddUpdate}
-                          err={err}
-                          report={report}
-                        />
-                      )}
                 </View>
               </View>
             ))}

@@ -12,7 +12,6 @@ import {
   SvgViewHide,
   SvgViewShow,
 } from '../../icons/v2';
-import { type CategoryListProps } from '../autocomplete/CategoryAutocomplete';
 import { Button } from '../common/Button';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
@@ -22,8 +21,8 @@ import { GraphButton } from './GraphButton';
 
 type CategorySelectorProps = {
   categoryGroups: Array<CategoryGroupEntity>;
-  selectedCategories: CategoryListProps['items'];
-  setSelectedCategories: (selectedCategories: CategoryEntity[]) => null;
+  selectedCategories: CategoryEntity[];
+  setSelectedCategories: (selectedCategories: CategoryEntity[]) => void;
   showHiddenCategories?: boolean;
 };
 
@@ -45,10 +44,15 @@ export function CategorySelector({
     filteredGroup(categoryGroup).map(category => selectAll.push(category)),
   );
 
+  if (selectedCategories === undefined) {
+    selectedCategories = categoryGroups.flatMap(cg => cg.categories);
+  }
+
   const selectedCategoryMap = useMemo(
     () => selectedCategories.map(selected => selected.id),
     [selectedCategories],
   );
+
   const allCategoriesSelected = selectAll.every(category =>
     selectedCategoryMap.includes(category.id),
   );

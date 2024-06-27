@@ -5,19 +5,18 @@ import { Item, Section } from '@react-stately/collections';
 import * as monthUtils from 'loot-core/src/shared/months';
 import { isPreviewId } from 'loot-core/src/shared/transactions';
 
+import { AnimatedLoading } from '../../../icons/AnimatedLoading';
 import { theme } from '../../../style';
 import { Text } from '../../common/Text';
+import { View } from '../../common/View';
 
 import { ListBox } from './ListBox';
 import { Transaction } from './Transaction';
 
 export function TransactionList({
-  account,
-  accounts,
-  categories,
-  payees,
+  isLoading,
   transactions,
-  isNew,
+  isNewTransaction,
   onSelect,
   scrollProps = {},
   onLoadMore,
@@ -45,12 +44,24 @@ export function TransactionList({
         });
       }
 
-      if (!transaction.is_child) {
-        sections[sections.length - 1].data.push(transaction);
-      }
+      sections[sections.length - 1].data.push(transaction);
     });
     return sections;
   }, [transactions]);
+
+  if (isLoading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <AnimatedLoading width={25} height={25} />
+      </View>
+    );
+  }
 
   return (
     <>
@@ -98,12 +109,8 @@ export function TransactionList({
                   >
                     <Transaction
                       transaction={transaction}
-                      account={account}
-                      categories={categories}
-                      accounts={accounts}
-                      payees={payees}
-                      added={isNew(transaction.id)}
-                      onSelect={onSelect} // onSelect(transaction)}
+                      added={isNewTransaction(transaction.id)}
+                      onSelect={onSelect}
                     />
                   </Item>
                 );

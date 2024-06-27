@@ -1,12 +1,9 @@
-import React, { useRef, useState } from 'react';
-
-import * as monthUtils from 'loot-core/src/shared/months';
+import React, { useState } from 'react';
 
 import { useCategories } from '../../hooks/useCategories';
 import { useLocalPref } from '../../hooks/useLocalPref';
 import { theme, styles } from '../../style';
 import { View } from '../common/View';
-import { IntersectionBoundary } from '../tooltips';
 
 import { BudgetCategories } from './BudgetCategories';
 import { BudgetSummaries } from './BudgetSummaries';
@@ -32,16 +29,16 @@ export function BudgetTable(props) {
     onBudgetAction,
   } = props;
 
-  const budgetCategoriesRef = useRef();
   const { grouped: categoryGroups } = useCategories();
-  const [collapsed = [], setCollapsedPref] = useLocalPref('budget.collapsed');
+  const [collapsedGroupIds = [], setCollapsedGroupIdsPref] =
+    useLocalPref('budget.collapsed');
   const [showHiddenCategories, setShowHiddenCategoriesPef] = useLocalPref(
     'budget.showHiddenCategories',
   );
   const [editing, setEditing] = useState(null);
 
-  const onEditMonth = (id, monthIndex) => {
-    setEditing(id ? { id, cell: monthIndex } : null);
+  const onEditMonth = (id, month) => {
+    setEditing(id ? { id, cell: month } : null);
   };
 
   const onEditName = id => {
@@ -97,7 +94,7 @@ export function BudgetTable(props) {
 
   const moveVertically = dir => {
     const flattened = categoryGroups.reduce((all, group) => {
-      if (collapsed.includes(group.id)) {
+      if (collapsedGroupIds.includes(group.id)) {
         return all.concat({ id: group.id, isGroup: true });
       }
       return all.concat([{ id: group.id, isGroup: true }, ...group.categories]);
@@ -134,20 +131,8 @@ export function BudgetTable(props) {
     }
   };
 
-  const resolveMonth = monthIndex => {
-    return monthUtils.addMonths(startMonth, monthIndex);
-  };
-
-  const _onShowActivity = (catId, monthIndex) => {
-    onShowActivity(catId, resolveMonth(monthIndex));
-  };
-
-  const _onBudgetAction = (monthIndex, type, args) => {
-    onBudgetAction(resolveMonth(monthIndex), type, args);
-  };
-
   const onCollapse = collapsedIds => {
-    setCollapsedPref(collapsedIds);
+    setCollapsedGroupIdsPref(collapsedIds);
   };
 
   const onToggleHiddenCategories = () => {
@@ -215,41 +200,38 @@ export function BudgetTable(props) {
           expandAllCategories={expandAllCategories}
           collapseAllCategories={collapseAllCategories}
         />
-        <IntersectionBoundary.Provider value={budgetCategoriesRef}>
+        <View
+          style={{
+            overflowY: 'scroll',
+            overflowAnchor: 'none',
+            flex: 1,
+            paddingLeft: 5,
+            paddingRight: 5,
+          }}
+        >
           <View
             style={{
-              overflowY: 'scroll',
-              overflowAnchor: 'none',
-              flex: 1,
-              paddingLeft: 5,
-              paddingRight: 5,
+              flexShrink: 0,
             }}
-            innerRef={budgetCategoriesRef}
+            onKeyDown={onKeyDown}
           >
-            <View
-              style={{
-                flexShrink: 0,
-              }}
-              onKeyDown={onKeyDown}
-            >
-              <BudgetCategories
-                categoryGroups={categoryGroups}
-                editingCell={editing}
-                dataComponents={dataComponents}
-                onEditMonth={onEditMonth}
-                onEditName={onEditName}
-                onSaveCategory={onSaveCategory}
-                onSaveGroup={onSaveGroup}
-                onDeleteCategory={onDeleteCategory}
-                onDeleteGroup={onDeleteGroup}
-                onReorderCategory={_onReorderCategory}
-                onReorderGroup={_onReorderGroup}
-                onBudgetAction={_onBudgetAction}
-                onShowActivity={_onShowActivity}
-              />
-            </View>
+            <BudgetCategories
+              categoryGroups={categoryGroups}
+              editingCell={editing}
+              dataComponents={dataComponents}
+              onEditMonth={onEditMonth}
+              onEditName={onEditName}
+              onSaveCategory={onSaveCategory}
+              onSaveGroup={onSaveGroup}
+              onDeleteCategory={onDeleteCategory}
+              onDeleteGroup={onDeleteGroup}
+              onReorderCategory={_onReorderCategory}
+              onReorderGroup={_onReorderGroup}
+              onBudgetAction={onBudgetAction}
+              onShowActivity={onShowActivity}
+            />
           </View>
-        </IntersectionBoundary.Provider>
+        </View>
       </MonthsProvider>
     </View>
   );

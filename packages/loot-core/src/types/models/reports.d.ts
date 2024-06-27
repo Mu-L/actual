@@ -15,6 +15,7 @@ export interface CustomReportEntity {
   showEmpty: boolean;
   showOffBudget: boolean;
   showHiddenCategories: boolean;
+  includeCurrentInterval: boolean;
   showUncategorized: boolean;
   selectedCategories?: CategoryEntity[];
   graphType: string;
@@ -24,11 +25,40 @@ export interface CustomReportEntity {
   tombstone?: boolean;
 }
 
-export interface GroupedEntity {
-  data?: DataEntity[];
-  intervalData: DataEntity[];
-  groupedData?: DataEntity[];
-  legend?: LegendEntity[];
+export type balanceTypeOpType =
+  | 'totalAssets'
+  | 'totalDebts'
+  | 'totalTotals'
+  | 'netAssets'
+  | 'netDebts';
+
+export type SpendingMonthEntity = Record<
+  string | number,
+  {
+    cumulative: number;
+    daily: number;
+    date: string;
+    month: string;
+  }
+>;
+
+export interface SpendingDataEntity {
+  date: string;
+  totalAssets: number;
+  totalDebts: number;
+  totalTotals: number;
+  cumulative: number;
+}
+
+export interface SpendingEntity {
+  intervalData: {
+    months: SpendingMonthEntity;
+    day: string;
+    average: number;
+    thisMonth: number;
+    lastMonth: number;
+    lastYear: number;
+  }[];
   startDate?: string;
   endDate?: string;
   totalDebts: number;
@@ -36,36 +66,49 @@ export interface GroupedEntity {
   totalTotals: number;
 }
 
+export interface DataEntity {
+  data?: GroupedEntity[];
+  intervalData: IntervalEntity[];
+  groupedData?: GroupedEntity[] | null;
+  legend?: LegendEntity[];
+  startDate?: string;
+  endDate?: string;
+  totalDebts: number;
+  totalAssets: number;
+  netAssets: number;
+  netDebts: number;
+  totalTotals: number;
+}
+
 type LegendEntity = {
   name: string;
+  id: string | null;
   color: string;
 };
 
-export type ItemEntity = {
-  id: string;
-  name: string;
-  intervalData: IntervalData[];
+export type IntervalEntity = {
+  date?: string;
+  change?: number;
+  intervalStartDate?: string;
+  intervalEndDate?: string;
   totalAssets: number;
   totalDebts: number;
+  netAssets: number;
+  netDebts: number;
   totalTotals: number;
 };
 
-export type IntervalData = {
-  date: string;
-  totalAssets: number;
-  totalDebts: number;
-  totalTotals: number;
-};
-
-export interface DataEntity {
+export interface GroupedEntity {
   id: string;
   name: string;
   date?: string;
-  intervalData: IntervalData[];
-  categories?: ItemEntity[];
+  intervalData: IntervalEntity[];
   totalAssets: number;
   totalDebts: number;
   totalTotals: number;
+  netAssets: number;
+  netDebts: number;
+  categories?: GroupedEntity[];
 }
 
 export type Interval = {
@@ -85,6 +128,7 @@ export interface CustomReportData {
   show_empty: number;
   show_offbudget: number;
   show_hidden: number;
+  include_current: number;
   show_uncategorized: number;
   selected_categories?: CategoryEntity[];
   graph_type: string;

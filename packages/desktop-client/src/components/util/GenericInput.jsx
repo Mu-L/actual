@@ -3,6 +3,7 @@ import { useSelector } from 'react-redux';
 
 import { useReports } from 'loot-core/client/data-hooks/reports';
 import { getMonthYearFormat } from 'loot-core/src/shared/months';
+import { integerToAmount, amountToInteger } from 'loot-core/src/shared/util';
 
 import { useCategories } from '../../hooks/useCategories';
 import { useDateFormat } from '../../hooks/useDateFormat';
@@ -18,10 +19,14 @@ import { Checkbox } from '../forms';
 import { DateSelect } from '../select/DateSelect';
 import { RecurringSchedulePicker } from '../select/RecurringSchedulePicker';
 
+import { AmountInput } from './AmountInput';
+import { PercentInput } from './PercentInput';
+
 export function GenericInput({
   field,
   subfield,
   type,
+  numberFormatType = undefined,
   multi,
   value,
   inputRef,
@@ -33,6 +38,37 @@ export function GenericInput({
   const saved = useSelector(state => state.queries.saved);
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
 
+  const getNumberInputByFormatType = numberFormatType => {
+    switch (numberFormatType) {
+      case 'currency':
+        return (
+          <AmountInput
+            inputRef={inputRef}
+            value={amountToInteger(value)}
+            onUpdate={v => onChange(integerToAmount(v))}
+          />
+        );
+      case 'percentage':
+        return (
+          <PercentInput
+            inputRef={inputRef}
+            value={value}
+            onUpdatePercent={onChange}
+          />
+        );
+      default:
+        return (
+          <Input
+            inputRef={inputRef}
+            defaultValue={value || ''}
+            placeholder="nothing"
+            onEnter={e => onChange(e.target.value)}
+            onBlur={e => onChange(e.target.value)}
+          />
+        );
+    }
+  };
+
   // This makes the UI more resilient in case of faulty data
   if (multi && !Array.isArray(value)) {
     value = [];
@@ -41,6 +77,7 @@ export function GenericInput({
   }
 
   const showPlaceholder = multi ? value.length === 0 : true;
+  const autocompleteType = multi ? 'multi' : 'single';
 
   let content;
   switch (type) {
@@ -49,7 +86,7 @@ export function GenericInput({
         case 'payee':
           content = (
             <PayeeAutocomplete
-              multi={multi}
+              type={autocompleteType}
               showMakeTransfer={false}
               openOnFocus={true}
               value={value}
@@ -65,8 +102,8 @@ export function GenericInput({
         case 'account':
           content = (
             <AccountAutocomplete
+              type={autocompleteType}
               value={value}
-              multi={multi}
               openOnFocus={true}
               onSelect={onChange}
               inputProps={{
@@ -80,12 +117,12 @@ export function GenericInput({
         case 'category':
           content = (
             <CategoryAutocomplete
+              type={autocompleteType}
               categoryGroups={categoryGroups}
               value={value}
-              multi={multi}
               openOnFocus={true}
               onSelect={onChange}
-              showHiddenItems={false}
+              showHiddenCategories={false}
               inputProps={{
                 inputRef,
                 ...(showPlaceholder ? { placeholder: 'nothing' } : null),
@@ -103,9 +140,9 @@ export function GenericInput({
         case 'saved':
           content = (
             <FilterAutocomplete
+              type={autocompleteType}
               saved={saved}
               value={value}
-              multi={multi}
               openOnFocus={true}
               onSelect={onChange}
               inputProps={{
@@ -118,9 +155,9 @@ export function GenericInput({
         case 'report':
           content = (
             <ReportAutocomplete
+              type={autocompleteType}
               saved={savedReports}
               value={value}
-              multi={multi}
               openOnFocus={true}
               onSelect={onChange}
               inputProps={{
@@ -200,13 +237,15 @@ export function GenericInput({
       if (multi) {
         content = (
           <Autocomplete
-            multi={true}
+            type={autocompleteType}
             suggestions={[]}
             value={value}
             inputProps={{ inputRef }}
             onSelect={onChange}
           />
         );
+      } else if (type === 'number') {
+        content = getNumberInputByFormatType(numberFormatType);
       } else {
         content = (
           <Input

@@ -1,6 +1,8 @@
 // @ts-strict-ignore
 import React, { useCallback, useRef, useState } from 'react';
+import { useDispatch } from 'react-redux';
 
+import { pushModal } from 'loot-core/client/actions';
 import { useSchedules } from 'loot-core/src/client/data-hooks/schedules';
 import { send } from 'loot-core/src/platform/client/fetch';
 import { type Query } from 'loot-core/src/shared/query';
@@ -17,24 +19,18 @@ import { type CommonModalProps } from '../Modals';
 
 import { ROW_HEIGHT, SchedulesTable } from './SchedulesTable';
 
-type ModalParams = {
-  id: string;
-  transaction: TransactionEntity;
-};
-
 export function ScheduleLink({
   modalProps,
   actions,
   transactionIds: ids,
   getTransaction,
-  pushModal,
 }: {
   actions: BoundActions;
   modalProps?: CommonModalProps;
   transactionIds: string[];
   getTransaction: (transactionId: string) => TransactionEntity;
-  pushModal: (name: string, params: ModalParams) => void;
 }) {
+  const dispatch = useDispatch();
   const [filter, setFilter] = useState('');
 
   const scheduleData = useSchedules({
@@ -59,14 +55,16 @@ export function ScheduleLink({
 
   async function onCreate() {
     actions.popModal();
-    pushModal('schedule-edit', {
-      id: null,
-      transaction: getTransaction(ids[0]),
-    });
+    dispatch(
+      pushModal('schedule-edit', {
+        id: null,
+        transaction: getTransaction(ids[0]),
+      }),
+    );
   }
 
   return (
-    <Modal title="Link Schedule" size={{ width: 600 }} {...modalProps}>
+    <Modal title="Link Schedule" size={{ width: 800 }} {...modalProps}>
       <View
         style={{
           flexDirection: 'row',
@@ -120,7 +118,6 @@ export function ScheduleLink({
           schedules={schedules}
           statuses={statuses}
           style={null}
-          tableStyle={{ marginInline: -20 }}
         />
       </View>
     </Modal>

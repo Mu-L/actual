@@ -5,7 +5,7 @@ import type { FeatureFlag } from 'loot-core/src/types/prefs';
 import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useLocalPref } from '../../hooks/useLocalPref';
 import { theme } from '../../style';
-import { LinkButton } from '../common/LinkButton';
+import { Link } from '../common/Link';
 import { Text } from '../common/Text';
 import { View } from '../common/View';
 import { Checkbox } from '../forms';
@@ -79,7 +79,9 @@ export function ExperimentalFeatures() {
       primaryAction={
         expanded ? (
           <View style={{ gap: '1em' }}>
-            <FeatureToggle flag="customReports">Custom reports</FeatureToggle>
+            <FeatureToggle flag="spendingReport">
+              Monthly spending
+            </FeatureToggle>
 
             <ReportBudgetFeature />
 
@@ -87,11 +89,15 @@ export function ExperimentalFeatures() {
               Goal templates
             </FeatureToggle>
             <FeatureToggle flag="simpleFinSync">SimpleFIN sync</FeatureToggle>
-            <FeatureToggle flag="splitsInRules">Splits in rules</FeatureToggle>
+            <FeatureToggle flag="iterableTopologicalSort">
+              Iterable topological sort budget
+            </FeatureToggle>
           </View>
         ) : (
-          <LinkButton
+          <Link
+            variant="text"
             onClick={() => setExpanded(true)}
+            data-testid="experimental-settings"
             style={{
               flexShrink: 0,
               alignSelf: 'flex-start',
@@ -99,7 +105,7 @@ export function ExperimentalFeatures() {
             }}
           >
             I understand the risks, show experimental features
-          </LinkButton>
+          </Link>
         )
       }
     >

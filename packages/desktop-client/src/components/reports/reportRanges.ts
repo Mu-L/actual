@@ -1,11 +1,13 @@
 import * as monthUtils from 'loot-core/src/shared/months';
+import { type LocalPrefs } from 'loot-core/types/prefs';
 
 export function validateStart(
   earliest: string,
   start: string,
   end: string,
   interval?: string,
-) {
+  firstDayOfWeekIdx?: LocalPrefs['firstDayOfWeekIdx'],
+): [string, string] {
   let addDays;
   let dateStart;
   switch (interval) {
@@ -35,6 +37,7 @@ export function validateStart(
     dateStart,
     interval ? end : monthUtils.monthFromDate(end),
     interval,
+    firstDayOfWeekIdx,
   );
 }
 
@@ -43,12 +46,13 @@ export function validateEnd(
   start: string,
   end: string,
   interval?: string,
-) {
+  firstDayOfWeekIdx?: LocalPrefs['firstDayOfWeekIdx'],
+): [string, string] {
   let subDays;
   let dateEnd;
   switch (interval) {
     case 'Monthly':
-      dateEnd = end + '-31';
+      dateEnd = monthUtils.getMonthEnd(end + '-01');
       subDays = 180;
       break;
     case 'Yearly':
@@ -73,6 +77,7 @@ export function validateEnd(
     interval ? start : monthUtils.monthFromDate(start),
     dateEnd,
     interval,
+    firstDayOfWeekIdx,
   );
 }
 
@@ -92,17 +97,24 @@ function boundedRange(
   start: string,
   end: string,
   interval?: string,
-) {
+  firstDayOfWeekIdx?: LocalPrefs['firstDayOfWeekIdx'],
+): [string, string] {
   let latest;
   switch (interval) {
+    case 'Daily':
+      latest = monthUtils.currentDay();
+      break;
+    case 'Weekly':
+      latest = monthUtils.currentWeek(firstDayOfWeekIdx);
+      break;
     case 'Monthly':
-      latest = monthUtils.currentMonth() + '-31';
+      latest = monthUtils.getMonthEnd(monthUtils.currentDay());
       break;
     case 'Yearly':
       latest = monthUtils.currentDay();
       break;
     default:
-      latest = monthUtils.currentMonth();
+      latest = monthUtils.currentDay();
       break;
   }
 
@@ -117,31 +129,27 @@ function boundedRange(
 
 export function getSpecificRange(
   offset: number,
-  addNumber: number,
-  interval: string,
+  addNumber: number | null,
+  type?: string,
+  firstDayOfWeekIdx?: LocalPrefs['firstDayOfWeekIdx'],
 ) {
   const currentDay = monthUtils.currentDay();
-  let currInterval;
-  let dateStart;
-  let dateEnd;
-  switch (interval) {
-    case 'Monthly':
-      currInterval = monthUtils.monthFromDate(currentDay);
-      dateStart = monthUtils.subMonths(currInterval, offset);
-      dateEnd = monthUtils.addMonths(
-        dateStart,
-        addNumber === null ? offset : addNumber,
-      );
-      break;
-    default:
-      currInterval = currentDay;
-      dateStart = monthUtils.subDays(currInterval, offset);
-      dateEnd = monthUtils.addDays(
-        dateStart,
-        addNumber === null ? offset : addNumber,
-      );
-      break;
+  const currentWeek = monthUtils.currentWeek(firstDayOfWeekIdx);
+
+  let dateStart = monthUtils.subMonths(currentDay, offset) + '-01';
+  let dateEnd = monthUtils.getMonthEnd(
+    monthUtils.addMonths(dateStart, addNumber === null ? offset : addNumber) +
+      '-01',
+  );
+
+  if (type === 'Week') {
+    dateStart = monthUtils.subWeeks(currentWeek, offset);
+    dateEnd = monthUtils.getWeekEnd(
+      monthUtils.addWeeks(dateStart, addNumber === null ? offset : addNumber),
+      firstDayOfWeekIdx,
+    );
   }
+
   return [dateStart, dateEnd];
 }
 
